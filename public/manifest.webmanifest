@@ -1,0 +1,17 @@
+{
+  "name": "ERSEL — إرسل لي",
+  "short_name": "ERSEL",
+  "description": "منصة توصيل محلية بولاية تيارت — بلدية السوقر",
+  "lang": "ar-DZ",
+  "dir": "rtl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b1f45",
+  "theme_color": "#0b1f45",
+  "icons": [
+    { "src": "/brand/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/brand/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/brand/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

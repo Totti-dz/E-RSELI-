@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand palette. `colorPrimary` is also used as the FCM notification accent. -->
+    <color name="colorPrimary">#0b1f45</color>
+    <color name="colorPrimaryDark">#071630</color>
+    <color name="colorAccent">#0eb8eb</color>
+    <color name="ersel_navy">#0b1f45</color>
+    <color name="ersel_blue">#0eb8eb</color>
+</resources>
