@@ -42,6 +42,8 @@ jobs:
           # الزر داخل التطبيق يشير إلى هذا المستودع — لا حاجة لتعديل أي ملف.
           VITE_GITHUB_REPO: ${{ github.repository }}
           VITE_ANDROID_APK_URL: https://github.com/${{ github.repository }}/releases/latest/download/ersel.apk
+          # يُطبع داخل التطبيق ويُقارن بآخر إصدار ليعرف المستخدم أن هناك تحديثًا.
+          VITE_APP_BUILD: ${{ github.run_number }}
         run: npm run build
 
       - name: توليد مشروع أندرويد + الأيقونة + الصوت
@@ -102,14 +104,15 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-      # إصدار واحد ثابت باسم latest يُحدَّث في كل تشغيل، وبه يبقى الرابط ثابتًا.
-      - name: نشر الإصدار الثابت (latest)
+      # إصدار لكل بناء بوسم v<رقم التشغيل>، ويُعلَّم «latest» فيبقى الرابط الثابت
+      # releases/latest/download/ersel.apk صالحًا، مع احتفاظك بتاريخ كل النسخ.
+      - name: نشر الإصدار
         uses: softprops/action-gh-release@v2
         with:
           files: ersel.apk
-          tag_name: latest
-          name: ERSEL — أحدث نسخة
+          tag_name: v${{ github.run_number }}
+          name: ERSEL v${{ github.run_number }}
           make_latest: true
           prerelease: false
           body: |
-            ## تطبيق ERSEL للأندرويد
+            ## تطبيق ERSEL للأندرويد — بناء ${{ github.run_number }}
