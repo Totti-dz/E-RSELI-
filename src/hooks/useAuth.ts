@@ -29,11 +29,23 @@ export function useAuth() {
 
   const loadProfile = useCallback(async (userId: string, attempt = 0): Promise<Profile | null> => {
     if (!supabase) return null
-    const { data, error: queryError } = await supabase
+    let { data, error: queryError } = await supabase
       .from('profiles')
-      .select('id, full_name, phone, role')
+      .select('id, full_name, phone, role, avatar_url')
       .eq('id', userId)
       .maybeSingle()
+
+    // Deployments that have not run migration 14 yet have no avatar_url column.
+    if (queryError && /avatar_url|42703|column .* does not exist/i.test(queryError.message || '')) {
+      const fallback = await supabase
+        .from('profiles')
+        .select('id, full_name, phone, role')
+        .eq('id', userId)
+        .maybeSingle()
+      data = fallback.data as typeof data
+      queryError = fallback.error
+    }
+
     if (queryError) throw queryError
     if (!data && attempt < 4) {
       await new Promise(resolve => setTimeout(resolve, 350 * (attempt + 1)))
@@ -44,11 +56,13 @@ export function useAuth() {
     if (!role) {
       throw new Error('تعذّر قراءة دور الحساب من قاعدة البيانات.')
     }
+    const row = data as Record<string, unknown>
     return {
-      id: data.id as string,
-      full_name: (data.full_name as string) || '',
-      phone: (data.phone as string) || '',
-      role
+      id: row.id as string,
+      full_name: (row.full_name as string) || '',
+      phone: (row.phone as string) || '',
+      role,
+      avatar_url: row.avatar_url ? String(row.avatar_url) : null
     }
   }, [])
 

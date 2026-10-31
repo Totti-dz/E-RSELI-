@@ -10,7 +10,7 @@
  *  - Everything else same-origin uses stale-while-revalidate.
  *  - Cross-origin requests (Supabase API, tiles) are never intercepted.
  */
-const VERSION = 'ersel-shell-v3';
+const VERSION = 'ersel-shell-v4';
 const SHELL = ['/', '/manifest.webmanifest', '/icon.svg', '/brand/logo-mark.webp'];
 
 self.addEventListener('install', event => {
@@ -91,4 +91,45 @@ self.addEventListener('fetch', event => {
     return;
   }
   event.respondWith(staleWhileRevalidate(request));
+});
+
+self.addEventListener('push', event => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { body: event.data ? event.data.text() : '' };
+  }
+  const title = data.title || (data.notification && data.notification.title) || 'ERSEL';
+  const body = data.body || (data.notification && data.notification.body) || '';
+  const orderId = (data.data && data.data.orderId) || data.orderId || '';
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: '/brand/icon-192.png',
+      badge: '/brand/icon-192.png',
+      lang: 'ar',
+      dir: 'rtl',
+      tag: orderId ? 'ersel-' + orderId : 'ersel-push',
+      data: { orderId },
+      renotify: true
+    })
+  );
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const orderId = (event.notification.data && event.notification.data.orderId) || '';
+  const target = orderId ? '/?order=' + encodeURIComponent(orderId) : '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
+      for (const client of clients) {
+        if ('focus' in client) {
+          client.postMessage({ type: 'ersel:open-order', orderId });
+          return client.focus();
+        }
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(target);
+    })
+  );
 });

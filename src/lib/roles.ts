@@ -6,7 +6,7 @@ export function isStaffRole(role: AppRole | null | undefined): boolean {
   return !!role && STAFF_ROLES.includes(role)
 }
 
-export type AppPage = 'home' | 'new' | 'orders' | 'courier' | 'admin' | 'track' | 'desk'
+export type AppPage = 'home' | 'new' | 'orders' | 'courier' | 'admin' | 'track' | 'desk' | 'profile'
 
 export function homePageForRole(role: AppRole | null | undefined): AppPage {
   if (role === 'employee' || role === 'courier' || role === 'admin') return 'desk'

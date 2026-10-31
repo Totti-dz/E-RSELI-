@@ -6,6 +6,7 @@ import {
 
 const order = (patch: Partial<StaffOrder> = {}): StaffOrder => ({
   id: 'o1',
+  order_code: 'ERS-0001',
   service: 'parcel',
   customer_name: 'زبون',
   phone: '+213551234567',
@@ -24,6 +25,14 @@ const order = (patch: Partial<StaffOrder> = {}): StaffOrder => ({
   dropoff_lng: null,
   created_at: '2026-10-29T10:00:00Z',
   updated_at: null,
+  courier_confirmed_at: null,
+  customer_confirmed_at: null,
+  completed_at: null,
+  customer_avatar: null,
+  customer_rating: null,
+  my_offer: null,
+  offers_count: 0,
+  unread_messages: 0,
   ...patch
 })
 

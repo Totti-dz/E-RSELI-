@@ -7,6 +7,8 @@ export type Profile = {
   full_name: string
   phone: string
   role: AppRole
+  /** Public URL of the uploaded avatar; null when the account has no photo. */
+  avatar_url: string | null
 }
 
 const SYNTH_DOMAIN = 'phone.ersel.app'
@@ -155,7 +157,7 @@ export async function verifyAdminAccess(): Promise<AdminAccessResult> {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, full_name, phone, role')
+    .select('id, full_name, phone, role, avatar_url')
     .eq('id', userId)
     .maybeSingle()
 
@@ -197,7 +199,10 @@ export async function verifyAdminAccess(): Promise<AdminAccessResult> {
       id: data.id as string,
       full_name: (data.full_name as string) || '',
       phone: (data.phone as string) || '',
-      role: 'admin'
+      role: 'admin',
+      avatar_url: (data as Record<string, unknown>).avatar_url
+        ? String((data as Record<string, unknown>).avatar_url)
+        : null
     }
   }
 }

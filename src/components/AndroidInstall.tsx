@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  BellRing, Check, Copy, Download, ExternalLink, ShieldAlert,
+  BellRing, Check, Copy, Download, ExternalLink, RefreshCw, ShieldAlert,
   Smartphone, Volume2, X
 } from 'lucide-react'
-import { APK_URL, ANDROID_MIN_VERSION, APP_VERSION, hasApkLink } from '../lib/release'
+import {
+  APK_URL, ANDROID_MIN_VERSION, APP_BUILD, APP_VERSION,
+  checkForUpdate, hasApkLink
+} from '../lib/release'
 import {
   notificationPermission, notificationsEnabled, notificationSupport,
   requestNotifications, sendTestNotification, setNotificationsEnabled
@@ -22,6 +25,12 @@ export default function AndroidInstall({ onClose }: Props) {
   const [feedback, setFeedback] = useState('')
   const [busy, setBusy] = useState(false)
 
+  const [update, setUpdate] = useState<{ build: number; url: string } | null>(null)
+  const [checking, setChecking] = useState(false)
+  const [updateNote, setUpdateNote] = useState('')
+
+  const isIosDevice = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent)
+  const showApkDownload = hasApkLink && !isIosDevice
   const support = useMemo(() => notificationSupport(), [])
 
   useEffect(() => {
@@ -86,6 +95,22 @@ export default function AndroidInstall({ onClose }: Props) {
     setFeedback(result.ok ? 'أُرسل إشعار تجريبي الآن.' : result.error)
   }
 
+  async function runUpdateCheck() {
+    if (checking) return
+    setChecking(true)
+    setUpdateNote('')
+    const result = await checkForUpdate()
+    if (result.kind === 'newer') {
+      setUpdate({ build: result.build, url: result.url })
+    } else {
+      setUpdate(null)
+      setUpdateNote(result.kind === 'current'
+        ? `أنت على أحدث نسخة (بناء ${APP_BUILD}).`
+        : 'تعذّر التحقّق الآن. تأكّد من الاتصال ثم أعد المحاولة.')
+    }
+    setChecking(false)
+  }
+
   return (
     <div className="apk-sheet" role="dialog" aria-modal="true" aria-labelledby="apk-sheet-title">
       <button className="apk-sheet-backdrop" type="button" aria-label="إغلاق" onClick={onClose} />
@@ -96,11 +121,13 @@ export default function AndroidInstall({ onClose }: Props) {
           <span className="apk-sheet-icon"><img src="/brand/logo-mark.webp" alt="ERSEL" /></span>
           <div>
             <h2 id="apk-sheet-title">تطبيق ERSEL للأندرويد</h2>
-            <p>الإصدار {APP_VERSION} · أندرويد {ANDROID_MIN_VERSION} وأحدث</p>
+            <p>
+              الإصدار {APP_VERSION}{APP_BUILD > 0 ? ` · بناء ${APP_BUILD}` : ''} · أندرويد {ANDROID_MIN_VERSION} وأحدث
+            </p>
           </div>
         </header>
 
-        {hasApkLink ? (
+        {showApkDownload ? (
           <>
             <a className="apk-download-button" href={APK_URL} rel="noopener noreferrer">
               <Download size={19} />
@@ -115,17 +142,26 @@ export default function AndroidInstall({ onClose }: Props) {
           <div className="apk-note">
             <ShieldAlert size={17} />
             <span>
-              رابط APK يُضاف عند نشر أول إصدار على GitHub. حتى ذلك الحين ثبّت ERSEL كتطبيق
-              من المتصفح بالخطوات أدناه — يعمل بنفس الشكل وبنفس الإشعارات.
+              {isIosDevice
+                ? 'الآيفون لا يدعم ملفات APK. ثبّت ERSEL من Safari: مشاركة ← إضافة إلى الشاشة الرئيسية.'
+                : 'رابط APK يُضاف عند نشر أول إصدار على GitHub. حتى ذلك الحين ثبّت ERSEL كتطبيق من المتصفح بالخطوات أدناه.'}
             </span>
           </div>
         )}
 
-        <ol className="apk-steps">
-          <li><b>حمّل الملف</b><span>من الزر أعلاه عبر متصفح الهاتف، لا من حاسوب.</span></li>
-          <li><b>اسمح بالتثبيت</b><span>إن ظهر تحذير «مصادر غير معروفة» اسمح به لمرة واحدة ثم أكمل.</span></li>
-          <li><b>افتح ERSEL واسمح بالإشعارات</b><span>ليصلك صوت التنبيه عند قبول الطلب أو تسليمه.</span></li>
-        </ol>
+        {isIosDevice ? (
+          <ol className="apk-steps">
+            <li><b>افتح في Safari</b><span>الإضافة إلى الشاشة الرئيسية لا تعمل من Chrome على iOS.</span></li>
+            <li><b>مشاركة ← إضافة إلى الشاشة الرئيسية</b><span>تحصل على أيقونة وتطبيق بملء الشاشة.</span></li>
+            <li><b>اسمح بالإشعارات</b><span>على iOS 16.4+ بعد التثبيت كـ PWA. الصندوق داخل التطبيق يعمل دائمًا.</span></li>
+          </ol>
+        ) : (
+          <ol className="apk-steps">
+            <li><b>حمّل الملف</b><span>من الزر أعلاه عبر متصفح الهاتف، لا من حاسوب.</span></li>
+            <li><b>اسمح بالتثبيت</b><span>إن ظهر تحذير «مصادر غير معروفة» اسمح به لمرة واحدة ثم أكمل.</span></li>
+            <li><b>افتح ERSEL واسمح بالإشعارات</b><span>ليصلك صوت التنبيه عند قبول الطلب أو تسليمه.</span></li>
+          </ol>
+        )}
 
         <section className="apk-block">
           <div className="apk-block-head">
@@ -161,14 +197,45 @@ export default function AndroidInstall({ onClose }: Props) {
           {feedback && <div className="apk-feedback" role="status">{feedback}</div>}
         </section>
 
+        {/* Only the installed APK carries a build number; the hosted site is
+            always current, so this block would be noise there. */}
+        {APP_BUILD > 0 && (
+          <section className="apk-block">
+            <div className="apk-block-head">
+              <RefreshCw size={17} />
+              <b>التحديثات</b>
+              <span className="apk-state">بناء {APP_BUILD}</span>
+            </div>
+            <p className="apk-block-hint">
+              يتحقّق من آخر إصدار منشور على GitHub ويخبرك إن كان هناك بناء أحدث.
+            </p>
+            {update ? (
+              <a className="apk-download-button" href={update.url} rel="noopener noreferrer">
+                <Download size={18} /> تحميل بناء {update.build}
+              </a>
+            ) : (
+              <button
+                className="apk-ghost-button"
+                type="button"
+                disabled={checking}
+                onClick={() => void runUpdateCheck()}
+              >
+                <RefreshCw size={16} /> {checking ? 'جارٍ التحقّق…' : 'تحقّق من التحديث'}
+              </button>
+            )}
+            {updateNote && <div className="apk-feedback" role="status">{updateNote}</div>}
+          </section>
+        )}
+
         <section className="apk-block">
           <div className="apk-block-head">
             <Smartphone size={17} />
             <b>تثبيت بدون APK</b>
           </div>
           <p className="apk-block-hint">
-            من متصفح Chrome: القائمة ⋮ ← «إضافة إلى الشاشة الرئيسية». تعمل النسخة كتطبيق
-            كامل الشاشة دون متجر.
+            {isIosDevice
+              ? 'من Safari فقط: مشاركة ← إضافة إلى الشاشة الرئيسية. تعمل النسخة كتطبيق كامل الشاشة.'
+              : 'من متصفح Chrome: القائمة ⋮ ← «إضافة إلى الشاشة الرئيسية». تعمل النسخة كتطبيق كامل الشاشة دون متجر.'}
           </p>
           {installPrompt && (
             <button

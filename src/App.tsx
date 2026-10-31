@@ -11,6 +11,8 @@ import Onboarding from './components/Onboarding'
 import AuthScreen from './components/AuthScreen'
 import TrackOrder from './pages/TrackOrder'
 import MyOrders from './pages/MyOrders'
+import ProfilePage from './pages/Profile'
+import NotificationBell from './components/NotificationBell'
 import CourierApply from './components/CourierApply'
 import AdminGate from './components/AdminGate'
 import AndroidInstall from './components/AndroidInstall'
@@ -19,13 +21,14 @@ const EmployeeDesk = lazy(() => import('./components/EmployeeDesk'))
 const AdminDesk = lazy(() => import('./components/AdminDesk'))
 const CodeDesk = lazy(() => import('./components/CodeDesk'))
 import { SERVICES } from './lib/services'
-import type { AppRole } from './lib/auth'
+import type { AppRole, Profile } from './lib/auth'
 import { unlockAdminWithCode, verifyAdminAccess } from './lib/auth'
 import { fetchCodeDesk, type CodeDeskPayload } from './lib/codeDesk'
 import type { ServiceId } from './lib/services'
 import { homePageForRole, isStaffRole, ROLE_LABELS, type AppPage } from './lib/roles'
 import { useOrderNotifications } from './hooks/useOrderNotifications'
 import { hasApkLink } from './lib/release'
+import { avatarInitials } from './lib/profile'
 
 const ONBOARDING_KEY = 'ersel_onboarding_done_v1'
 const ADMIN_TAP_WINDOW_MS = 1800
@@ -62,11 +65,33 @@ export default function App() {
   const role: AppRole | null = profile?.role ?? null
   const isAndroidDevice = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)
   const [showApkSheet, setShowApkSheet] = useState(false)
+  const [unreadNotifications, setUnreadNotifications] = useState(0)
+  const [focusOrderId, setFocusOrderId] = useState<string | null>(null)
+  const [deskRefreshKey, setDeskRefreshKey] = useState(0)
   const openApkSheet = useCallback(() => setShowApkSheet(true), [])
   const closeApkSheet = useCallback(() => setShowApkSheet(false), [])
-  const openOrdersPage = useCallback(() => setPage('orders'), [])
+  const clearFocus = useCallback(() => setFocusOrderId(null), [])
 
-  useOrderNotifications(userId, openOrdersPage)
+  /** Notification tap → open the order in the screen that owns it. */
+  const openOrderFromNotification = useCallback((orderId: string) => {
+    setFocusOrderId(orderId)
+    setNotice('')
+    setPage(current => {
+      if (current === 'orders' || current === 'desk') return current
+      return isStaffRole(role) ? 'desk' : 'orders'
+    })
+  }, [role])
+
+  const onNewOrderNotification = useCallback(() => {
+    setDeskRefreshKey(key => key + 1)
+  }, [])
+
+  useOrderNotifications({
+    userId,
+    onOpenOrder: openOrderFromNotification,
+    onUnread: setUnreadNotifications,
+    onNewOrder: onNewOrderNotification
+  })
 
   useEffect(() => {
     const timer = setTimeout(() => setMinSplash(true), 700)
@@ -92,15 +117,33 @@ export default function App() {
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const fromQuery = params.get('order')
+    if (fromQuery) openOrderFromNotification(fromQuery)
+  }, [openOrderFromNotification])
+
+  useEffect(() => {
+    function onMessage(event: MessageEvent) {
+      if (event.data?.type !== 'ersel:open-order') return
+      const orderId = String(event.data.orderId || '')
+      if (orderId) openOrderFromNotification(orderId)
+    }
+    navigator.serviceWorker?.addEventListener('message', onMessage)
+    return () => navigator.serviceWorker?.removeEventListener('message', onMessage)
+  }, [openOrderFromNotification])
+
   const nav: { id: AppPage; label: string; icon: typeof Truck }[] = role && isStaffRole(role)
     ? [
         { id: 'desk', label: 'لوحة العمل', icon: ClipboardList },
-        { id: 'home', label: 'الموقع', icon: Truck }
+        { id: 'home', label: 'الموقع', icon: Truck },
+        ...(session ? [{ id: 'profile' as const, label: 'ملفي', icon: UserRound }] : [])
       ]
     : [
         { id: 'home', label: 'الرئيسية', icon: Truck },
         { id: 'orders', label: 'طلباتي', icon: ClipboardList },
         { id: 'courier', label: 'للموصّلين', icon: Bike },
+        ...(session ? [{ id: 'profile' as const, label: 'ملفي', icon: UserRound }] : []),
         ...(!session ? [{ id: 'track' as const, label: 'تتبع طلب', icon: Search }] : [])
       ]
   const roleLabels = ROLE_LABELS
@@ -263,7 +306,17 @@ export default function App() {
     return (
       <div className="app-immersive">
         <Suspense fallback={<div className="empty-state">جارٍ تحميل لوحة العمل…</div>}>
-          <EmployeeDesk profile={profile!} onBack={() => go('home')} />
+          <EmployeeDesk
+            profile={profile!}
+            onBack={() => go('home')}
+            focusOrderId={focusOrderId}
+            onFocusHandled={clearFocus}
+            refreshKey={deskRefreshKey}
+            unread={unreadNotifications}
+            onUnreadChange={setUnreadNotifications}
+            onOpenProfile={() => go('profile')}
+            onOpenOrder={openOrderFromNotification}
+          />
         </Suspense>
         {showAdminGate && (
           <AdminGate
@@ -297,11 +350,24 @@ export default function App() {
         </button>
       )}
       {session ? (
-        <div className="account-chip">
-          <span className="account-avatar"><UserRound size={16} /></span>
-          <span className="account-text"><b>{profile?.full_name || 'حسابي'}</b><small>{role ? roleLabels[role] : '...'}</small></span>
-          <button className="account-logout" aria-label="تسجيل الخروج" onClick={() => { void signOut(); setLastRoutedUser(null); setAdminUnlocked(false); setPage('home'); setGuest(false) }}><LogOut size={16} /></button>
-        </div>
+        <>
+          <NotificationBell
+            unread={unreadNotifications}
+            onUnreadChange={setUnreadNotifications}
+            onOpenOrder={openOrderFromNotification}
+          />
+          <div className="account-chip">
+            <button className="account-open" onClick={() => go('profile')} aria-label="الملف الشخصي">
+              <span className="account-avatar">
+                {profile?.avatar_url
+                  ? <img src={profile.avatar_url} alt="" />
+                  : <UserRound size={16} />}
+              </span>
+              <span className="account-text"><b>{profile?.full_name || 'حسابي'}</b><small>{role ? roleLabels[role] : '...'}</small></span>
+            </button>
+            <button className="account-logout" aria-label="تسجيل الخروج" onClick={() => { void signOut(); setLastRoutedUser(null); setAdminUnlocked(false); setPage('home'); setGuest(false) }}><LogOut size={16} /></button>
+          </div>
+        </>
       ) : (
         <button className="login-button" onClick={() => setGuest(false)}><LogIn size={17}/> دخول</button>
       )}
@@ -367,7 +433,30 @@ export default function App() {
         <section className="page-section narrow"><span className="eyebrow">لوحة العمل</span><h1 className="page-title">وصول مقيّد</h1><p className="muted">هذه الصفحة للموظفين المعتمدين فقط.</p><button className="primary-button" onClick={() => go('home')}>العودة</button></section>
       )}
 
-      {page === 'orders' && <MyOrders onNewOrder={() => go('new')} />}
+      {page === 'orders' && (
+        <MyOrders
+          onNewOrder={() => go('new')}
+          viewerId={userId}
+          focusOrderId={focusOrderId}
+          onFocusHandled={clearFocus}
+        />
+      )}
+
+      {page === 'profile' && profile && (
+        <ProfilePage
+          profile={profile}
+          onProfileChange={(next: Profile) => applyVerifiedProfile(next)}
+          onBack={() => go(homePageForRole(profile.role))}
+          onOpenOrder={orderId => { setFocusOrderId(orderId); go('orders') }}
+          onSignOut={() => {
+            void signOut()
+            setLastRoutedUser(null)
+            setAdminUnlocked(false)
+            setPage('home')
+            setGuest(false)
+          }}
+        />
+      )}
 
       {page === 'courier' && (
         <CourierApply

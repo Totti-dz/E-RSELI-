@@ -162,7 +162,18 @@ export async function submitAccountOrder(draft: OrderDraft, userId: string): Pro
 }
 
 export type GuestTrackResult =
-  | { ok: true; orderCode: string; service: string; status: string; createdAt: string }
+  | {
+      ok: true
+      orderCode: string
+      service: string
+      status: string
+      createdAt: string
+      priceDzd: number
+      courierName: string
+      courierConfirmed: boolean
+      customerConfirmed: boolean
+      completed: boolean
+    }
   | { ok: false; error: string }
 
 export async function trackGuestOrder(token: string): Promise<GuestTrackResult> {
@@ -176,14 +187,31 @@ export async function trackGuestOrder(token: string): Promise<GuestTrackResult> 
     }
     return { ok: false, error: 'تعذّر جلب حالة الطلب.' }
   }
-  const result = data as { ok?: boolean; order_code?: string; service?: string; status?: string; created_at?: string; error?: string } | null
+  const result = data as {
+    ok?: boolean
+    order_code?: string
+    service?: string
+    status?: string
+    created_at?: string
+    price_dzd?: number
+    courier_name?: string | null
+    courier_confirmed?: boolean
+    customer_confirmed?: boolean
+    completed?: boolean
+    error?: string
+  } | null
   if (!result?.ok) return { ok: false, error: 'لم نجد طلباً بهذا الرمز.' }
   return {
     ok: true,
     orderCode: result.order_code || '',
     service: result.service || '',
     status: result.status || 'pending',
-    createdAt: result.created_at || ''
+    createdAt: result.created_at || '',
+    priceDzd: Number(result.price_dzd || 0),
+    courierName: result.courier_name || '',
+    courierConfirmed: result.courier_confirmed === true,
+    customerConfirmed: result.customer_confirmed === true,
+    completed: result.completed === true
   }
 }
 
