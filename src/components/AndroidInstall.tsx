@@ -29,8 +29,6 @@ export default function AndroidInstall({ onClose }: Props) {
   const [checking, setChecking] = useState(false)
   const [updateNote, setUpdateNote] = useState('')
 
-  const isIosDevice = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent)
-  const showApkDownload = hasApkLink && !isIosDevice
   const support = useMemo(() => notificationSupport(), [])
 
   useEffect(() => {
@@ -127,7 +125,7 @@ export default function AndroidInstall({ onClose }: Props) {
           </div>
         </header>
 
-        {showApkDownload ? (
+        {hasApkLink ? (
           <>
             <a className="apk-download-button" href={APK_URL} rel="noopener noreferrer">
               <Download size={19} />
@@ -142,26 +140,17 @@ export default function AndroidInstall({ onClose }: Props) {
           <div className="apk-note">
             <ShieldAlert size={17} />
             <span>
-              {isIosDevice
-                ? 'الآيفون لا يدعم ملفات APK. ثبّت ERSEL من Safari: مشاركة ← إضافة إلى الشاشة الرئيسية.'
-                : 'رابط APK يُضاف عند نشر أول إصدار على GitHub. حتى ذلك الحين ثبّت ERSEL كتطبيق من المتصفح بالخطوات أدناه.'}
+              رابط APK يُضاف عند نشر أول إصدار على GitHub. حتى ذلك الحين ثبّت ERSEL كتطبيق
+              من المتصفح بالخطوات أدناه — يعمل بنفس الشكل وبنفس الإشعارات.
             </span>
           </div>
         )}
 
-        {isIosDevice ? (
-          <ol className="apk-steps">
-            <li><b>افتح في Safari</b><span>الإضافة إلى الشاشة الرئيسية لا تعمل من Chrome على iOS.</span></li>
-            <li><b>مشاركة ← إضافة إلى الشاشة الرئيسية</b><span>تحصل على أيقونة وتطبيق بملء الشاشة.</span></li>
-            <li><b>اسمح بالإشعارات</b><span>على iOS 16.4+ بعد التثبيت كـ PWA. الصندوق داخل التطبيق يعمل دائمًا.</span></li>
-          </ol>
-        ) : (
-          <ol className="apk-steps">
-            <li><b>حمّل الملف</b><span>من الزر أعلاه عبر متصفح الهاتف، لا من حاسوب.</span></li>
-            <li><b>اسمح بالتثبيت</b><span>إن ظهر تحذير «مصادر غير معروفة» اسمح به لمرة واحدة ثم أكمل.</span></li>
-            <li><b>افتح ERSEL واسمح بالإشعارات</b><span>ليصلك صوت التنبيه عند قبول الطلب أو تسليمه.</span></li>
-          </ol>
-        )}
+        <ol className="apk-steps">
+          <li><b>حمّل الملف</b><span>من الزر أعلاه عبر متصفح الهاتف، لا من حاسوب.</span></li>
+          <li><b>اسمح بالتثبيت</b><span>إن ظهر تحذير «مصادر غير معروفة» اسمح به لمرة واحدة ثم أكمل.</span></li>
+          <li><b>افتح ERSEL واسمح بالإشعارات</b><span>ليصلك صوت التنبيه عند قبول الطلب أو تسليمه.</span></li>
+        </ol>
 
         <section className="apk-block">
           <div className="apk-block-head">
@@ -233,9 +222,8 @@ export default function AndroidInstall({ onClose }: Props) {
             <b>تثبيت بدون APK</b>
           </div>
           <p className="apk-block-hint">
-            {isIosDevice
-              ? 'من Safari فقط: مشاركة ← إضافة إلى الشاشة الرئيسية. تعمل النسخة كتطبيق كامل الشاشة.'
-              : 'من متصفح Chrome: القائمة ⋮ ← «إضافة إلى الشاشة الرئيسية». تعمل النسخة كتطبيق كامل الشاشة دون متجر.'}
+            من متصفح Chrome: القائمة ⋮ ← «إضافة إلى الشاشة الرئيسية». تعمل النسخة كتطبيق
+            كامل الشاشة دون متجر.
           </p>
           {installPrompt && (
             <button

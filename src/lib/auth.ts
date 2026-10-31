@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { config } from './runtimeConfig'
 
 export type AppRole = 'customer' | 'courier' | 'employee' | 'admin'
 
@@ -11,7 +12,6 @@ export type Profile = {
   avatar_url: string | null
 }
 
-const SYNTH_DOMAIN = 'phone.ersel.app'
 
 const AR_DIGITS: Record<string, string> = {
   '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4',
@@ -35,7 +35,7 @@ export function normalizePhone(raw: string): { ok: true; e164: string } | { ok: 
 }
 
 export function phoneToEmail(e164: string): string {
-  return `${e164.replace(/\D/g, '')}@${SYNTH_DOMAIN}`
+  return `${e164.replace(/\D/g, '')}@${config.emailDomain}`
 }
 
 export function passwordProblem(password: string): string | null {
@@ -45,18 +45,22 @@ export function passwordProblem(password: string): string | null {
   return null
 }
 
-export function mapAuthError(message: string): string {
-  const m = message.toLowerCase()
-  if (m.includes('database error saving new user')) return 'تعذّر إنشاء الحساب. ربما رقم الهاتف مستعمل مسبقاً.'
-  if (m.includes('email signups are disabled') || m.includes('signups are disabled')) return 'إنشاء الحسابات معطّل في إعدادات الخدمة. فعّل مزوّد Email في Supabase (Authentication → Sign In / Providers).'
+export function mapAuthError(message: string, code?: string): string {
+  const m = `${message || ''} ${code || ''}`.toLowerCase()
+  if (m.includes('database error saving new user')) return 'تعذّر إنشاء الحساب في قاعدة البيانات. غالبًا رقم الهاتف مستعمل مسبقًا، أو لم يُشغَّل ملف SQL بالكامل (افتح /check.html للفحص).'
+  if (m.includes('email_address_not_authorized') || m.includes('not authorized')) return 'الخدمة ترفض إرسال بريد التأكيد. أوقف «Confirm email» في Supabase → Authentication → Sign In / Providers → Email ثم أعد المحاولة.'
+  if (m.includes('email_address_invalid') || m.includes('is invalid')) return 'الخدمة رفضت صيغة البريد الداخلي المشتق من الهاتف. افتح /check.html لمعرفة السبب، أو غيّر emailDomain في config.js قبل تسجيل أي مستخدم.'
+  if (m.includes('over_email_send_rate_limit') || m.includes('email rate limit')) return 'تجاوزت الخدمة حدّ إرسال البريد. أوقف «Confirm email» في Supabase لأن التطبيق لا يحتاج بريدًا حقيقيًا.'
+  if (m.includes('signup_disabled') || m.includes('email signups are disabled') || m.includes('signups not allowed') || m.includes('signups are disabled')) return 'إنشاء الحسابات معطّل في إعدادات الخدمة. فعّل مزوّد Email و«Allow new users to sign up» في Supabase → Authentication.'
   if (m.includes('email logins are disabled')) return 'تسجيل الدخول معطّل في إعدادات الخدمة. فعّل مزوّد Email في Supabase.'
-  if (m.includes('invalid login credentials')) return 'رقم الهاتف أو كلمة المرور غير صحيحة.'
-  if (m.includes('user already registered')) return 'يوجد حساب مسجّل بهذا الرقم. جرّب تسجيل الدخول.'
-  if (m.includes('rate limit') || m.includes('security purposes')) return 'محاولات كثيرة. انتظر قليلاً ثم أعد المحاولة.'
-  if (m.includes('email not confirmed')) return 'الحساب يحتاج تأكيداً. تواصل مع الدعم.'
-  if (m.includes('network') || m.includes('failed to fetch')) return 'تعذّر الاتصال بالشبكة. تحقّق من الإنترنت وأعد المحاولة.'
-  if (m.includes('password should be')) return 'كلمة المرور ضعيفة. استعمل 8 أحرف على الأقل.'
-  return 'تعذّر إتمام العملية. حاول مرة أخرى.'
+  if (m.includes('invalid login credentials') || m.includes('invalid_credentials')) return 'رقم الهاتف أو كلمة المرور غير صحيحة.'
+  if (m.includes('user already registered') || m.includes('user_already_exists')) return 'يوجد حساب مسجّل بهذا الرقم. جرّب تسجيل الدخول.'
+  if (m.includes('rate limit') || m.includes('security purposes') || m.includes('over_request_rate_limit')) return 'محاولات كثيرة. انتظر قليلاً ثم أعد المحاولة.'
+  if (m.includes('email not confirmed') || m.includes('email_not_confirmed')) return 'الحساب غير مؤكَّد. أوقف «Confirm email» في Supabase ثم شغّل الإصلاح في آخر ملف 04 من ملفات SQL.'
+  if (m.includes('weak_password') || m.includes('password should be')) return 'كلمة المرور ضعيفة. استعمل 8 أحرف على الأقل.'
+  if (m.includes('invalid api key') || m.includes('invalid_api_key') || m.includes('no api key')) return 'مفتاح Supabase غير صحيح. راجع supabaseAnonKey في config.js.'
+  if (m.includes('network') || m.includes('failed to fetch') || m.includes('load failed')) return 'تعذّر الاتصال بالشبكة. تحقّق من الإنترنت وأعد المحاولة.'
+  return 'تعذّر إتمام العملية. افتح /check.html لمعرفة السبب.'
 }
 
 type Result = { ok: true } | { ok: false; error: string }
@@ -77,12 +81,12 @@ export async function signUpCustomer(input: {
     password: input.password,
     options: { data: { full_name: name, phone: phone.e164 } }
   })
-  if (error) return { ok: false, error: mapAuthError(error.message) }
+  if (error) return { ok: false, error: mapAuthError(error.message, (error as { code?: string }).code) }
   if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
     return { ok: false, error: 'يوجد حساب مسجّل بهذا الرقم. جرّب تسجيل الدخول.' }
   }
   if (!data.session) {
-    return { ok: false, error: 'تم إنشاء الحساب لكن الدخول التلقائي غير مفعّل. جرّب تسجيل الدخول.' }
+    return { ok: false, error: 'تم إنشاء الحساب لكن الدخول التلقائي غير مفعّل لأن «Confirm email» ما زال مفعّلًا في Supabase. أوقفه ثم شغّل الإصلاح الموجود في آخر ملف 04 من ملفات SQL، وبعدها سجّل الدخول.' }
   }
   return { ok: true }
 }
@@ -112,7 +116,7 @@ export async function signInWithIdentifier(input: {
     email,
     password: input.password
   })
-  if (error) return { ok: false, error: mapAuthError(error.message) }
+  if (error) return { ok: false, error: mapAuthError(error.message, (error as { code?: string }).code) }
 
   const userId = data.user?.id
   if (!userId) return { ok: false, error: 'تعذّر قراءة بيانات الحساب.' }

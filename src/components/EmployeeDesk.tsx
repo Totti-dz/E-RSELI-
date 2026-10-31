@@ -10,7 +10,7 @@ import { serviceTitle } from '../lib/services'
 import {
   advanceStaffOrder, canNegotiatePrice, claimStaffOrder, courierStep,
   isUnclaimedJob, loadStaffOrders, NEXT_STATUS, placeOffer,
-  STATUS_ACTION_LABEL, watchStaffOrders, type StaffOrder
+  STATUS_ACTION_LABEL, type StaffOrder
 } from '../lib/staffOrders'
 import { courierConfirmDelivery } from '../lib/delivery'
 import { loadCourierDashboard, type CourierDashboard } from '../lib/staffStats'
@@ -76,14 +76,13 @@ export default function EmployeeDesk({
   const [dashboardLoading, setDashboardLoading] = useState(false)
   const [chatOrder, setChatOrder] = useState<StaffOrder | null>(null)
 
-  const refresh = useCallback(async (quiet = false) => {
-    if (!quiet) setLoading(true)
+  const refresh = useCallback(async () => {
+    setLoading(true)
     setError('')
     setActionError('')
     const result = await loadStaffOrders()
-    if (!quiet) setLoading(false)
+    setLoading(false)
     if (!result.ok) {
-      if (quiet) return
       setPermissionBlocked(result.kind === 'permission')
       setError(result.error)
       setOrders([])
@@ -115,11 +114,10 @@ export default function EmployeeDesk({
 
   useEffect(() => { void refresh() }, [refresh])
   useEffect(() => { void refreshDashboard() }, [refreshDashboard])
-  useEffect(() => watchStaffOrders(() => { void refresh(true) }), [refresh])
 
   // A new order notification bumps refreshKey: pull the fresh list.
   useEffect(() => {
-    if (refreshKey > 0) void refresh(true)
+    if (refreshKey > 0) void refresh()
   }, [refreshKey, refresh])
 
   useEffect(() => {

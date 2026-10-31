@@ -35,7 +35,6 @@ const SEEN_KEY = 'ersel_seen_notifications_v1'
 const SEEN_LIMIT = 150
 const POLL_INTERVAL_MS = 20_000
 const PUSH_ENABLED = String(import.meta.env.VITE_PUSH_ENABLED || '').toLowerCase() === 'true'
-const VAPID_PUBLIC_KEY = (import.meta.env.VITE_VAPID_PUBLIC_KEY || '').trim()
 
 export type NotificationSupport = 'native' | 'web' | 'unsupported'
 
@@ -335,28 +334,9 @@ export function watchNotificationInbox(
   void tick()
   timer = window.setInterval(() => { void tick() }, POLL_INTERVAL_MS)
 
-  const onVisible = () => {
-    if (document.visibilityState === 'visible') void tick()
-  }
-  document.addEventListener('visibilitychange', onVisible)
-
-  let channel: ReturnType<NonNullable<typeof supabase>['channel']> | null = null
-  if (supabase) {
-    channel = supabase
-      .channel('ersel-inbox')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'notifications' },
-        () => { void tick() }
-      )
-      .subscribe()
-  }
-
   return () => {
     stopped = true
     if (timer !== null) window.clearInterval(timer)
-    document.removeEventListener('visibilitychange', onVisible)
-    if (channel && supabase) void supabase.removeChannel(channel)
   }
 }
 
@@ -424,56 +404,8 @@ export async function bindNotificationTaps(onOpenOrder: (orderId: string) => voi
  * Optional FCM registration. Silent no-op unless the build opted in, so a fork
  * without Firebase still ships a working APK.
  */
-function urlBase64ToUint8Array(base64: string): Uint8Array {
-  const padding = '='.repeat((4 - (base64.length % 4)) % 4)
-  const binary = atob((base64 + padding).replace(/-/g, '+').replace(/_/g, '/'))
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
-  return bytes
-}
-
-async function registerWebPush(): Promise<void> {
-  if (!PUSH_ENABLED || !supabase || !('serviceWorker' in navigator) || !VAPID_PUBLIC_KEY) return
-  if (Capacitor.isNativePlatform()) return
-  try {
-    const permission = await Notification.requestPermission()
-    if (permission !== 'granted') return
-    const registration = await navigator.serviceWorker.ready
-    let subscription = await registration.pushManager.getSubscription()
-    if (!subscription) {
-      subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-      })
-    }
-    const token = JSON.stringify(subscription)
-    if (token.length < 20) return
-    const { error } = await supabase.rpc('register_device_token', {
-      p_token: token,
-      p_platform: 'web',
-      p_app_version: APP_VERSION_FOR_TOKEN()
-    })
-    if (error) console.warn('[ERSEL] تعذّر تسجيل اشتراك الويب', error.message)
-  } catch (error) {
-    console.warn('[ERSEL] Web Push غير مهيّأ', error)
-  }
-}
-
-function APP_VERSION_FOR_TOKEN(): string | null {
-  return (typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : null)
-}
-
-/**
- * Optional FCM (Android) / Web Push (PWA) registration.
- * Silent no-op unless the build opted in, so a fork without Firebase still ships.
- */
 export async function registerPush(): Promise<void> {
-  if (!PUSH_ENABLED || !supabase) return
-
-  if (!Capacitor.isNativePlatform()) {
-    await registerWebPush()
-    return
-  }
+  if (!PUSH_ENABLED || !Capacitor.isNativePlatform() || !supabase) return
 
   try {
     let permission = await PushNotifications.checkPermissions()
@@ -487,7 +419,7 @@ export async function registerPush(): Promise<void> {
         .rpc('register_device_token', {
           p_token: token.value,
           p_platform: Capacitor.getPlatform(),
-          p_app_version: APP_VERSION_FOR_TOKEN()
+          p_app_version: (import.meta.env.VITE_APP_VERSION as string | undefined) || null
         })
         .then(({ error }) => {
           if (error) console.warn('[ERSEL] تعذّر تسجيل رمز الجهاز', error.message)
@@ -498,11 +430,12 @@ export async function registerPush(): Promise<void> {
       console.warn('[ERSEL] فشل تسجيل الإشعارات (تحقّق من google-services.json)', error)
     })
 
+    // A push that arrives while the app is open would otherwise be silent.
     await PushNotifications.addListener('pushNotificationReceived', (notification) => {
       const orderId = String(notification.data?.orderId || '')
       const status = String(notification.data?.status || '') as OrderStatus
-      const title = String(notification.data?.title || notification.title || 'ERSEL')
-      const body = String(notification.data?.body || notification.body || '')
+      const title = String(notification.data?.title || 'ERSEL')
+      const body = String(notification.data?.body || '')
       if (!orderId && !title) return
       void presentNotification(
         title,

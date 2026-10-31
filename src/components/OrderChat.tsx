@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Loader2, MessageCircle, Send, X } from 'lucide-react'
 import {
   CHAT_MAX_LENGTH, loadOrderMessages, markOrderMessagesRead, sendOrderMessage,
-  watchOrderMessages, type ChatMessage
+  type ChatMessage
 } from '../lib/chat'
 import { formatWhen } from '../lib/format'
 
@@ -51,12 +51,8 @@ export default function OrderChat({ orderId, viewerId, title, subtitle, avatarUr
 
   useEffect(() => {
     const timer = window.setInterval(() => { void refresh(true) }, POLL_MS)
-    const stopLive = watchOrderMessages(orderId, () => { void refresh(true) })
-    return () => {
-      window.clearInterval(timer)
-      stopLive()
-    }
-  }, [refresh, orderId])
+    return () => window.clearInterval(timer)
+  }, [refresh])
 
   useEffect(() => {
     const node = listRef.current

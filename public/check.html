@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>ERSEL — فحص الإعداد</title>
+<style>
+  body{font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;background:#0b1f45;color:#eef2fb;margin:0;padding:20px;line-height:1.7}
+  main{max-width:640px;margin:0 auto}
+  h1{font-size:20px;margin:0 0 4px}
+  p.sub{color:#9fb0d3;margin:0 0 18px;font-size:14px}
+  .row{background:#13294f;border-radius:12px;padding:12px 14px;margin:10px 0;border-inline-start:5px solid #475b85}
+  .row.ok{border-color:#2fbf71}.row.bad{border-color:#e5484d}.row.warn{border-color:#f5a524}
+  .t{font-weight:700}.d{font-size:14px;color:#c6d2ee;margin-top:2px}
+  code{background:#0b1f45;padding:1px 6px;border-radius:6px;direction:ltr;unicode-bidi:embed;font-size:13px}
+  button{background:#2fbf71;color:#04210f;border:0;border-radius:10px;padding:10px 16px;font-weight:700;font-size:15px;margin-top:8px}
+</style>
+</head>
+<body>
+<main>
+  <h1>فحص إعداد ERSEL</h1>
+  <p class="sub">يختبر الاتصال بقاعدة البيانات وإعدادات التسجيل، ويخبرك بالخطوة الناقصة بالضبط.</p>
+  <div id="out"></div>
+  <button id="again">أعد الفحص</button>
+</main>
+<script src="/config.js"></script>
+<script>
+(function () {
+  var out = document.getElementById('out');
+  function add(state, title, detail) {
+    var d = document.createElement('div');
+    d.className = 'row ' + state;
+    var t = document.createElement('div'); t.className = 't'; t.textContent = (state === 'ok' ? '✅ ' : state === 'bad' ? '❌ ' : '⚠️ ') + title;
+    d.appendChild(t);
+    if (detail) { var s = document.createElement('div'); s.className = 'd'; s.innerHTML = detail; d.appendChild(s); }
+    out.appendChild(d);
+  }
+  function get(url, key) {
+    return fetch(url, { headers: { apikey: key, Authorization: 'Bearer ' + key } })
+      .then(function (r) { return r.text().then(function (txt) { var j = null; try { j = JSON.parse(txt); } catch (e) {} return { status: r.status, json: j, text: txt }; }); });
+  }
+  function run() {
+    out.innerHTML = '';
+    var c = window.ERSEL_CONFIG || {};
+    var url = (c.supabaseUrl || '').replace(/\/+$/, ''), key = c.supabaseAnonKey || '';
+    if (!url || !key || /YOUR_/i.test(url + key)) {
+      add('bad', 'ملف config.js ناقص', 'تأكد أن <code>config.js</code> موجود بجانب <code>index.html</code> وفيه <code>supabaseUrl</code> و<code>supabaseAnonKey</code>.');
+      return;
+    }
+    add('ok', 'ملف config.js مقروء', 'المشروع: <code>' + url.replace('https://', '') + '</code>');
+    get(url + '/auth/v1/settings', key).then(function (r) {
+      if (r.status === 401 || r.status === 403) { add('bad', 'المفتاح مرفوض', 'تحقق من <code>supabaseAnonKey</code> في config.js (يجب أن يكون anon العام لنفس المشروع).'); return; }
+      if (r.status !== 200 || !r.json) { add('bad', 'تعذّر قراءة إعدادات المصادقة', 'الحالة: ' + r.status + '. تحقق من <code>supabaseUrl</code>.'); return; }
+      var s = r.json;
+      add('ok', 'الاتصال بـ Supabase يعمل');
+      if (s.disable_signup) add('bad', 'التسجيل معطّل', 'Supabase → Authentication → Sign In / Providers → فعّل «Allow new users to sign up».');
+      else add('ok', 'التسجيل مفتوح');
+      if (s.external && s.external.email === false) add('bad', 'مزوّد Email معطّل', 'فعّله من Authentication → Sign In / Providers → Email.');
+      else add('ok', 'مزوّد Email مفعّل');
+      if (s.mailer_autoconfirm === true) add('ok', '«Confirm email» متوقف', 'الحسابات تُفعَّل فورًا بعد التسجيل. هذا هو المطلوب.');
+      else add('bad', '«Confirm email» ما زال مفعّلًا', 'التطبيق يستعمل بريدًا وهميًا مشتقًّا من الهاتف، فلن يصل إليه أي بريد. أوقفه من Authentication → Sign In / Providers → Email ثم أعد الفحص.');
+    }).catch(function () { add('bad', 'تعذّر الوصول إلى Supabase', 'تحقق من الإنترنت ومن <code>supabaseUrl</code>.'); })
+    .then(function () { return get(url + '/rest/v1/profiles?select=id&limit=1', key); })
+    .then(function (r) {
+      if (r.status === 200) { add('ok', 'جداول قاعدة البيانات موجودة', 'جدول <code>profiles</code> يستجيب.'); return; }
+      var code = r.json && r.json.code, msg = (r.json && (r.json.message || '')) || '';
+      if (code === 'PGRST205' || code === '42P01' || /could not find the table|does not exist/i.test(msg)) add('bad', 'ملفات SQL لم تُشغَّل', 'شغّل ملفات مجلد <code>3-sql</code> بالترتيب 01 ثم 02 ثم 03 ثم 04 في Supabase → SQL Editor.');
+      else if (r.status === 401 || r.status === 403 || code === '42501') add('ok', 'جداول قاعدة البيانات موجودة', 'القراءة محمية بـ RLS كما يجب (الزائر لا يرى الملفات الشخصية).');
+      else add('warn', 'استجابة غير متوقعة من الجداول', 'الحالة ' + r.status + ': ' + (msg || r.text).slice(0, 160));
+    })
+    .then(function () { return fetch(url + '/rest/v1/rpc/get_guest_order', { method: 'POST', headers: { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' }, body: '{"p_token":"x"}' }); })
+    .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { status: r.status, json: j }; }); })
+    .then(function (r) {
+      var code = r.json && r.json.code;
+      if (code === 'PGRST202' || r.status === 404) add('bad', 'دوال الطلبات غير موجودة', 'لم تكتمل ملفات SQL. شغّل 01 ← 04 بالترتيب (آمنة للتكرار).');
+      else add('ok', 'دوال الطلبات موجودة');
+    })
+    .catch(function () {});
+  }
+  document.getElementById('again').onclick = run;
+  run();
+})();
+</script>
+</body>
+</html>

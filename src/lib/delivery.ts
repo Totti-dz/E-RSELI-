@@ -107,8 +107,7 @@ const RATE_ERRORS: Record<string, string> = {
   no_courier: 'لم يُسند موصّل لهذا الطلب.',
   not_delivered: 'التقييم متاح بعد تسليم الطلب.',
   confirm_first: 'أكّد استلام الطلب أولًا ثم قيّم الموصّل.',
-  stars_invalid: 'اختر عدد نجوم بين 1 و5.',
-  already_rated: 'قيّمت هذا الطلب مسبقًا. لا يمكن التقييم مرتين.'
+  stars_invalid: 'اختر عدد نجوم بين 1 و5.'
 }
 
 export async function rateCourier(orderId: string, stars: number, comment = ''): Promise<RateResult> {

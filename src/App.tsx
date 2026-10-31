@@ -117,22 +117,6 @@ export default function App() {
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const fromQuery = params.get('order')
-    if (fromQuery) openOrderFromNotification(fromQuery)
-  }, [openOrderFromNotification])
-
-  useEffect(() => {
-    function onMessage(event: MessageEvent) {
-      if (event.data?.type !== 'ersel:open-order') return
-      const orderId = String(event.data.orderId || '')
-      if (orderId) openOrderFromNotification(orderId)
-    }
-    navigator.serviceWorker?.addEventListener('message', onMessage)
-    return () => navigator.serviceWorker?.removeEventListener('message', onMessage)
-  }, [openOrderFromNotification])
-
   const nav: { id: AppPage; label: string; icon: typeof Truck }[] = role && isStaffRole(role)
     ? [
         { id: 'desk', label: 'لوحة العمل', icon: ClipboardList },

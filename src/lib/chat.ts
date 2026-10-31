@@ -101,18 +101,4 @@ export async function markOrderMessagesRead(orderId: string): Promise<void> {
   }
 }
 
-/** Live inserts for one order. Falls back to the caller's poller if Realtime is off. */
-export function watchOrderMessages(orderId: string, onChange: () => void): () => void {
-  if (!supabase) return () => {}
-  const channel = supabase
-    .channel(`ersel-chat-${orderId}`)
-    .on(
-      'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'order_messages', filter: `order_id=eq.${orderId}` },
-      () => onChange()
-    )
-    .subscribe()
-  return () => { void supabase!.removeChannel(channel) }
-}
-
 export { MAX_LENGTH as CHAT_MAX_LENGTH }

@@ -10,7 +10,7 @@ import './styles.css'
 // The console keeps the signal for whoever deploys the app.
 if (!isSupabaseConfigured) {
   console.warn(
-    '[ERSEL] Supabase غير مُعد: أضف VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY إلى .env.local ثم أعد البناء. ' +
+    '[ERSEL] Supabase غير مُعد: عدّل supabaseUrl و supabaseAnonKey في ملف config.js (بجانب index.html) ثم حدّث الصفحة. ' +
     'حتى ذلك الحين تعمل الواجهة للعرض فقط، ولن يُحفظ أي حساب أو طلب.'
   )
 }

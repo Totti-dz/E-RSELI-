@@ -1,7 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { config } from './runtimeConfig'
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined
-const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
-
-export const isSupabaseConfigured = Boolean(url && key && !url.includes('YOUR_PROJECT'))
-export const supabase = isSupabaseConfigured ? createClient(url!, key!) : null
+export const isSupabaseConfigured = config.source !== 'none'
+export const supabase = isSupabaseConfigured ? createClient(config.url, config.anonKey) : null

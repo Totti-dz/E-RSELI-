@@ -11,10 +11,8 @@ interface ImportMetaEnv {
   readonly VITE_ANDROID_APK_URL?: string
   /** `owner/repo` — used to build the Releases download link when no direct URL is set. */
   readonly VITE_GITHUB_REPO?: string
-  /** `true` enables FCM / Web Push registration (needs Firebase + notify-order). */
+  /** `true` enables FCM registration (needs Firebase + google-services.json). */
   readonly VITE_PUSH_ENABLED?: string
-  /** Public VAPID key for Web Push. Private key never belongs in VITE_*. */
-  readonly VITE_VAPID_PUBLIC_KEY?: string
   /** Build number injected by CI (GitHub run number). 0 when built locally. */
   readonly VITE_APP_BUILD?: string
 }

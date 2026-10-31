@@ -46,9 +46,8 @@ export function useOrderNotifications({ userId, onOpenOrder, onUnread, onNewOrde
     void registerPush()
 
     let stopResume: (() => void) | undefined
-    void onAppResume(() => {
-      document.dispatchEvent(new Event('visibilitychange'))
-    }).then(fn => { stopResume = fn })
+    void onAppResume(() => { /* the watcher ticks on its own interval */ })
+      .then(fn => { stopResume = fn })
 
     const stopWatcher = watchNotificationInbox(
       item => {

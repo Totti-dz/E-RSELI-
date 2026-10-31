@@ -212,20 +212,6 @@ export async function advanceStaffOrder(orderId: string, next: OrderStatus): Pro
   return { ok: true }
 }
 
-/** Live pool changes so a claimed order leaves every other desk immediately. */
-export function watchStaffOrders(onChange: () => void): () => void {
-  if (!supabase) return () => {}
-  const channel = supabase
-    .channel('ersel-staff-orders')
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'orders' },
-      () => onChange()
-    )
-    .subscribe()
-  return () => { void supabase!.removeChannel(channel) }
-}
-
 /**
  * Price negotiation. A courier may propose a price while the order is still
  * unclaimed; the moment another courier accepts the order the server rejects
