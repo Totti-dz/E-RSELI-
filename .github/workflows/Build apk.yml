@@ -15,8 +15,8 @@
 # لا يحتاج Android Studio: مشروع android/ يُولَّد داخل التشغيل نفسه
 # عبر scripts/android-init.mjs (Capacitor + الأيقونة + الصوت).
 #
-# إعداد مرة واحدة (Settings ← Secrets and variables ← Actions ← Variables):
-#   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
+# الإعداد: عدّل public/config.js (supabaseUrl و supabaseAnonKey) مرة واحدة.
+#   متغيرات VITE_SUPABASE_* في GitHub اختيارية (احتياط فقط) ولم تعد لازمة.
 # اختياري للتوقيع الرسمي (Secrets):
 #   ERSEL_KEYSTORE_BASE64, ERSEL_KEYSTORE_PASSWORD,
 #   ERSEL_KEY_ALIAS, ERSEL_KEY_PASSWORD
@@ -71,16 +71,21 @@ jobs:
           VITE_ANDROID_APK_URL: https://github.com/${{ github.repository }}/releases/latest/download/ersel.apk
           # يُطبع داخل التطبيق ويُقارن بآخر إصدار ليعرف المستخدم أن هناك تحديثًا.
           VITE_APP_BUILD: ${{ github.run_number }}
-          VITE_PUSH_ENABLED: ${{ vars.VITE_PUSH_ENABLED || 'false' }}
-          VITE_VAPID_PUBLIC_KEY: ${{ vars.VITE_VAPID_PUBLIC_KEY }}
         run: npm run build
+
+      - name: التأكد من أن الإعداد مدمج (config.js)
+        run: |
+          set -euo pipefail
+          test -f dist/config.js || { echo "::error::dist/config.js مفقود (public/config.js)"; exit 1; }
+          grep -q 'supabase\.co' dist/config.js || { echo "::error::supabaseUrl غير مضبوط في public/config.js"; exit 1; }
+          if grep -qE 'YOUR_|xxxx' dist/config.js; then echo "::error::config.js ما زال يحتوي قيمًا تجريبية"; exit 1; fi
+          test -f dist/check.html || { echo "::error::dist/check.html مفقود"; exit 1; }
 
       - name: تجهيز نسخة الاستضافة (htdocs)
         run: |
           set -euo pipefail
           # محتوى dist يوضع في جذر الحزمة: index.html أوّلًا، لا مجلد dist.
-          # -FS يمنع إبقاء ملفات قديمة إن وُجد الأرشيف مسبقًا.
-          ( cd dist && zip -FS -r -q ../ersel-htdocs.zip . )
+          ( cd dist && zip -r -q ../ersel-htdocs.zip . )
           unzip -l ersel-htdocs.zip | head -20
           test "$(unzip -Z1 ersel-htdocs.zip | grep -c '^index.html$')" -eq 1 || {
             echo "::error::index.html ليس في جذر الحزمة"; exit 1; }
@@ -89,17 +94,6 @@ jobs:
 
       - name: توليد مشروع أندرويد + الأيقونة + الصوت
         run: node scripts/android-init.mjs
-
-      - name: google-services.json (اختياري — FCM)
-        env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
-        run: |
-          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
-            printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
-            echo "google-services.json كُتب — إشعارات FCM مفعّلة في هذا البناء."
-          else
-            echo "::notice::لا يوجد GOOGLE_SERVICES_JSON — الإشعارات المحلية تعمل، وFCM عند الإغلاق لن يعمل."
-          fi
 
       - name: تجهيز Java
         uses: actions/setup-java@v4
@@ -181,4 +175,3 @@ jobs:
 
             التثبيت: نزّل الملف على الهاتف، افتحه، واسمح بالتثبيت من هذا المصدر مرة واحدة.
             الإشعارات تعمل بصوت مخصّص بعد السماح بها من داخل التطبيق.
-
