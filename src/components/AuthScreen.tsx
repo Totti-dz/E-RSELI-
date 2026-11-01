@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ArrowLeft, Bike, CheckCircle2, Eye, EyeOff, Lock, LogIn, Phone, ShieldCheck, UserRound } from 'lucide-react'
-import { passwordProblem, resetPasswordByPhone, signInWithIdentifier, signOutEverywhere, signUpCustomer } from '../lib/auth'
+import { passwordProblem, signInWithIdentifier, signOutEverywhere, signUpCustomer } from '../lib/auth'
 import type { AppRole } from '../lib/auth'
 
 type Props = {
@@ -12,7 +12,7 @@ type Props = {
   reason?: string
 }
 
-type Step = 'choose' | 'login' | 'register' | 'reset'
+type Step = 'choose' | 'login' | 'register'
 type Role = 'customer' | 'employee'
 
 export default function AuthScreen({ onDone, onGuest, onCodeDesk, initialRole = 'customer', initialMode = 'choose', reason }: Props) {
@@ -30,33 +30,6 @@ export default function AuthScreen({ onDone, onGuest, onCodeDesk, initialRole = 
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [accepted, setAccepted] = useState(false)
-
-  const [resetPhone, setResetPhone] = useState('')
-  const [resetPassword, setResetPassword] = useState('')
-  const [resetConfirm, setResetConfirm] = useState('')
-  const [resetDone, setResetDone] = useState(false)
-
-  async function doReset(e: React.FormEvent) {
-    e.preventDefault()
-    setError('')
-    if (resetPassword !== resetConfirm) {
-      setError('كلمتا المرور غير متطابقتين.')
-      return
-    }
-    setLoading(true)
-    const result = await resetPasswordByPhone({ phone: resetPhone, password: resetPassword })
-    setLoading(false)
-    if (!result.ok) {
-      setError(result.error)
-      return
-    }
-    setLoginId(resetPhone)
-    setLoginPassword('')
-    setResetPassword('')
-    setResetConfirm('')
-    setResetDone(true)
-    setStep('login')
-  }
 
   function go(next: Step, nextRole: Role = role) {
     setError('')
@@ -169,44 +142,6 @@ export default function AuthScreen({ onDone, onGuest, onCodeDesk, initialRole = 
           </>
         )}
 
-        {step === 'reset' && (
-          <>
-            <button className="auth-back" onClick={() => go('login')}><ArrowLeft size={16} /> رجوع</button>
-            <h1 className="auth-title">استعادة كلمة المرور</h1>
-            <p className="auth-sub">أدخل رقم هاتفك المسجّل ثم كلمة المرور الجديدة.</p>
-            <form className="auth-form" onSubmit={doReset}>
-              <label>
-                رقم الهاتف
-                <span className="input-wrap">
-                  <Phone size={17} />
-                  <input value={resetPhone} onChange={e => setResetPhone(e.target.value)} placeholder="0551234567" inputMode="tel" autoComplete="tel" required />
-                </span>
-              </label>
-              <label>
-                كلمة المرور الجديدة
-                <span className="input-wrap">
-                  <Lock size={17} />
-                  <input type={showPassword ? 'text' : 'password'} value={resetPassword} onChange={e => setResetPassword(e.target.value)} autoComplete="new-password" required />
-                  <button type="button" className="input-eye" onClick={() => setShowPassword(v => !v)} aria-label="إظهار كلمة المرور">
-                    {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-                  </button>
-                </span>
-              </label>
-              <label>
-                أعد كتابة كلمة المرور
-                <span className="input-wrap">
-                  <Lock size={17} />
-                  <input type={showPassword ? 'text' : 'password'} value={resetConfirm} onChange={e => setResetConfirm(e.target.value)} autoComplete="new-password" required />
-                </span>
-              </label>
-              {error && <div className="auth-error" role="alert">{error}</div>}
-              <button className="primary-button full" disabled={loading}>
-                {loading ? 'جارٍ الحفظ…' : 'تغيير كلمة المرور'} <CheckCircle2 size={17} />
-              </button>
-            </form>
-          </>
-        )}
-
         {step === 'login' && (
           <>
             <button className="auth-back" onClick={() => go('choose')}><ArrowLeft size={16} /> رجوع</button>
@@ -251,7 +186,6 @@ export default function AuthScreen({ onDone, onGuest, onCodeDesk, initialRole = 
                 </span>
               </label>
 
-              {resetDone && !error && <div className="auth-success" role="status">تم تغيير كلمة المرور. سجّل الدخول بها الآن.</div>}
               {error && <div className="auth-error" role="alert">{error}</div>}
 
               <button className="primary-button full" disabled={loading}>
@@ -260,7 +194,6 @@ export default function AuthScreen({ onDone, onGuest, onCodeDesk, initialRole = 
             </form>
 
             <div className="auth-links">
-              <button onClick={() => { setResetDone(false); setResetPhone(loginId); go('reset') }}>نسيت كلمة المرور؟</button>
               {role === 'customer' && <button onClick={() => go('register', 'customer')}>إنشاء حساب جديد</button>}
             </div>
           </>

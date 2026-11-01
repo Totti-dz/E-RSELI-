@@ -13,7 +13,7 @@ import { loadAdminAccounts, loadOverviewStats, type AdminAccount, type OverviewS
 import { serviceTitle } from '../lib/services'
 import {
   adminForwardStatuses, advanceStaffOrder, canAdminCancel, loadStaffOrders,
-  type OrderStatus, type StaffOrder
+  watchStaffOrders, type OrderStatus, type StaffOrder
 } from '../lib/staffOrders'
 
 type Props = {
@@ -106,12 +106,13 @@ export default function AdminDesk({ profile, onExit }: Props) {
     )
   }
 
-  async function refreshOrders() {
-    setLoadingOrders(true)
+  async function refreshOrders(quiet = false) {
+    if (!quiet) setLoadingOrders(true)
     setOrdersError('')
     const result = await loadStaffOrders()
-    setLoadingOrders(false)
+    if (!quiet) setLoadingOrders(false)
     if (!result.ok) {
+      if (quiet) return
       setOrdersError(result.error)
       setOrders([])
       return
@@ -154,6 +155,8 @@ export default function AdminDesk({ profile, onExit }: Props) {
     void refreshOrders()
     void refreshAccounts()
   }, [])
+
+  useEffect(() => watchStaffOrders(() => { void refreshOrders(true) }), [])
 
   const selectedApp = useMemo(
     () => applications.find(item => item.userId === selectedAppId) || null,
