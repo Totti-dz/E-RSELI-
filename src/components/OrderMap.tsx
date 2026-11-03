@@ -12,6 +12,8 @@ type Props = {
   active: MapTarget
   onPick: (point: LatLng, target: MapTarget) => void
   onTileError?: () => void
+  /** Real driving route as [lng, lat] pairs (OSRM/GeoJSON order). */
+  route?: [number, number][] | null
   variant?: 'card' | 'full'
   sheetPadding?: boolean
 }
@@ -42,10 +44,12 @@ function ClickHandler({ onPick, active }: { onPick: Props['onPick']; active: Map
 function FitPoints({
   pickup,
   dropoff,
+  route,
   sheetPadding
 }: {
   pickup: LatLng | null
   dropoff: LatLng | null
+  route: [number, number][] | null
   sheetPadding: boolean
 }) {
   const map = useMap()
@@ -53,15 +57,17 @@ function FitPoints({
   useEffect(() => {
     const bottom = sheetPadding ? 320 : 46
     if (pickup && dropoff) {
+      const bounds = L.latLngBounds([pickup.lat, pickup.lng], [dropoff.lat, dropoff.lng])
+      route?.forEach(([lng, lat]) => bounds.extend([lat, lng]))
       map.fitBounds(
-        L.latLngBounds([pickup.lat, pickup.lng], [dropoff.lat, dropoff.lng]),
+        bounds,
         { paddingTopLeft: [36, 88], paddingBottomRight: [36, bottom], maxZoom: 16 }
       )
       return
     }
     if (pickup) map.setView([pickup.lat, pickup.lng], 16, { animate: true })
     else if (dropoff) map.setView([dropoff.lat, dropoff.lng], 16, { animate: true })
-  }, [map, pickup, dropoff, sheetPadding])
+  }, [map, pickup, dropoff, route, sheetPadding])
 
   return null
 }
@@ -87,6 +93,7 @@ export default function OrderMap({
   active,
   onPick,
   onTileError,
+  route = null,
   variant = 'card',
   sheetPadding = false
 }: Props) {
@@ -114,14 +121,20 @@ export default function OrderMap({
           radius={SERVICE_AREA.radiusM}
           pathOptions={{ color: '#1e5bb8', weight: 1.5, opacity: 0.55, fillColor: '#1e5bb8', fillOpacity: 0.06 }}
         />
-        {pickup && dropoff && (
+        {pickup && dropoff && !route && (
           <Polyline
             positions={[[pickup.lat, pickup.lng], [dropoff.lat, dropoff.lng]]}
             pathOptions={{ color: '#1e5bb8', weight: 3, opacity: 0.55, dashArray: '8 10' }}
           />
         )}
+        {pickup && dropoff && route && (
+          <Polyline
+            positions={route.map(([lng, lat]) => [lat, lng] as [number, number])}
+            pathOptions={{ color: '#1e5bb8', weight: 5, opacity: 0.85, lineJoin: 'round' }}
+          />
+        )}
         <ClickHandler onPick={onPick} active={active} />
-        <FitPoints pickup={pickup} dropoff={dropoff} sheetPadding={sheetPadding || variant === 'full'} />
+        <FitPoints pickup={pickup} dropoff={dropoff} route={route} sheetPadding={sheetPadding || variant === 'full'} />
         <KeepSized />
         {pickup && (
           <Marker

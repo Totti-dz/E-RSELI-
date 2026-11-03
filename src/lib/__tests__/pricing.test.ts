@@ -31,3 +31,16 @@ describe('suggested price formula', () => {
     expect(computeSuggestedPrice(1234)).toBe(110)
   })
 })
+
+import { ROAD_DETOUR_FACTOR, estimateRoadMeters } from '../pricing'
+
+describe('estimateRoadMeters', () => {
+  it('inflates straight-line distance by the detour factor', () => {
+    expect(estimateRoadMeters(1000)).toBe(Math.round(1000 * ROAD_DETOUR_FACTOR))
+  })
+  it('rejects empty or invalid distances', () => {
+    expect(estimateRoadMeters(0)).toBeNull()
+    expect(estimateRoadMeters(-5)).toBeNull()
+    expect(estimateRoadMeters(Number.NaN)).toBeNull()
+  })
+})

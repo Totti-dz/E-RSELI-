@@ -28,6 +28,14 @@ export function computeSuggestedPrice(distanceM: number): number | null {
   return Math.max(SUGGESTED_PRICING.minDzd, stepped)
 }
 
+/** Straight-line distance understates real roads; this keeps the estimate honest. */
+export const ROAD_DETOUR_FACTOR = 1.3
+
+export function estimateRoadMeters(straightMeters: number): number | null {
+  if (!Number.isFinite(straightMeters) || straightMeters <= 0) return null
+  return Math.round(straightMeters * ROAD_DETOUR_FACTOR)
+}
+
 /**
  * Shown only when a real driving route is available (VITE_ROUTING_ENABLED=1
  * and the routing request succeeded).

@@ -49,6 +49,10 @@
       return;
     }
     add('ok', 'ملف config.js مقروء', 'المشروع: <code>' + url.replace('https://', '') + '</code>');
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost') add('warn', 'الموقع يعمل على HTTP', 'التثبيت كتطبيق (PWA) والإشعارات يحتاجان HTTPS. ثبّت شهادة SSL المجانية من لوحة InfinityFree.');
+    else add('ok', 'اتصال آمن (HTTPS)');
+    if (!c.apkUrl) add('warn', 'رابط APK غير مضبوط', 'زر «تحميل التطبيق» لن يظهر لمستخدمي أندرويد. ضع الرابط في <code>apkUrl</code> داخل config.js.');
+    else add('ok', 'رابط APK مضبوط', '<code>' + String(c.apkUrl).replace(/^https?:\/\//, '').slice(0, 70) + '</code>');
     get(url + '/auth/v1/settings', key).then(function (r) {
       if (r.status === 401 || r.status === 403) { add('bad', 'المفتاح مرفوض', 'تحقق من <code>supabaseAnonKey</code> في config.js (يجب أن يكون anon العام لنفس المشروع).'); return; }
       if (r.status !== 200 || !r.json) { add('bad', 'تعذّر قراءة إعدادات المصادقة', 'الحالة: ' + r.status + '. تحقق من <code>supabaseUrl</code>.'); return; }
@@ -73,8 +77,11 @@
     .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { status: r.status, json: j }; }); })
     .then(function (r) {
       var code = r.json && r.json.code;
+      var emsg = (r.json && (r.json.message || '')) || '';
       if (code === 'PGRST202' || r.status === 404) add('bad', 'دوال الطلبات غير موجودة', 'لم تكتمل ملفات SQL. شغّل 01 ← 04 بالترتيب (آمنة للتكرار).');
-      else add('ok', 'دوال الطلبات موجودة');
+      else if (code === '42883' || /digest|gen_salt|crypt|gen_random_bytes/i.test(emsg)) add('bad', 'دوال التشفير (pgcrypto) لا تُرى من داخل الدوال', 'أعد تشغيل ملفات SQL الأربعة من هذه النسخة (فيها الإصلاح: <code>search_path</code> يشمل <code>extensions</code>). الرسالة: ' + emsg.slice(0, 120));
+      else if (r.status >= 500) add('warn', 'خطأ داخلي في دوال الطلبات', 'الحالة ' + r.status + ': ' + emsg.slice(0, 160));
+      else add('ok', 'دوال الطلبات موجودة وتعمل');
     })
     .catch(function () {});
   }

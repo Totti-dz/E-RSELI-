@@ -20,8 +20,9 @@
  */
 const REPO_OVERRIDE = ''
 
-const directUrl = (import.meta.env.VITE_ANDROID_APK_URL || '').trim()
-const repo = ((import.meta.env.VITE_GITHUB_REPO || REPO_OVERRIDE) || '').trim().replace(/^\/+|\/+$/g, '')
+const runtimeCfg = typeof window !== 'undefined' ? window.ERSEL_CONFIG : undefined
+const directUrl = (runtimeCfg?.apkUrl || import.meta.env.VITE_ANDROID_APK_URL || '').trim()
+const repo = ((runtimeCfg?.githubRepo || import.meta.env.VITE_GITHUB_REPO || REPO_OVERRIDE) || '').trim().replace(/^\/+|\/+$/g, '')
 
 /** Fixed asset name — the workflow always uploads the APK under this name. */
 export const APK_ASSET_NAME = 'ersel.apk'

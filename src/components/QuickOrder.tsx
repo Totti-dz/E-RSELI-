@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft, Bike, CheckCircle2, Copy, Info, Loader2, MapPin, Phone,
-  ReceiptText, ShieldCheck, UserRound, WifiOff, AlertTriangle, Car, ChevronUp, ChevronDown, LocateFixed
+  ReceiptText, ShieldCheck, UserRound, WifiOff, AlertTriangle, Car, ChevronUp, ChevronDown, LocateFixed, History, Share2, ArrowUpDown, Route as RouteIcon, Clock3
 } from 'lucide-react'
 import { normalizePhone, type Profile } from '../lib/auth'
 import { SERVICES, type ServiceId, serviceTitle } from '../lib/services'
@@ -11,10 +11,11 @@ import {
 } from '../lib/orders'
 import { SERVICE_AREA, isInsideServiceArea, ROUTING_ENABLED, haversineMeters, type LatLng } from '../lib/geo/config'
 import { describePoint, formatCoords, type Place } from '../lib/geo/places'
-import { fetchDrivingRoute, formatDistance } from '../lib/geo/routing'
-import { suggestPriceFromRouteMeters } from '../lib/pricing'
+import { fetchDrivingRoute, formatDistance, formatDuration } from '../lib/geo/routing'
+import { computeSuggestedPrice, estimateRoadMeters } from '../lib/pricing'
 import OrderMap, { type MapTarget } from './OrderMap'
 import PlaceField from './PlaceField'
+import { loadRecent, saveRecent, type RecentOrder } from '../lib/recentOrders'
 
 type Props = {
   profile: Profile | null
@@ -72,6 +73,10 @@ export default function QuickOrder({ profile, isAuthenticated, initialService = 
   const [locating, setLocating] = useState(false)
   const [routeDistanceM, setRouteDistanceM] = useState<number | null>(null)
   const [routeHint, setRouteHint] = useState('')
+  const [routeGeometry, setRouteGeometry] = useState<[number, number][] | null>(null)
+  const [routeDurationS, setRouteDurationS] = useState<number | null>(null)
+
+  const [recent] = useState<RecentOrder[]>(() => loadRecent())
 
   const submittingRef = useRef(false)
   const formRef = useRef<HTMLFormElement | null>(null)
@@ -108,6 +113,8 @@ export default function QuickOrder({ profile, isAuthenticated, initialService = 
   useEffect(() => {
     if (!ROUTING_ENABLED || !pickup || !dropoff) {
       setRouteDistanceM(null)
+      setRouteGeometry(null)
+      setRouteDurationS(null)
       setRouteHint('')
       return
     }
@@ -116,9 +123,13 @@ export default function QuickOrder({ profile, isAuthenticated, initialService = 
       if (!alive) return
       if (result.ok) {
         setRouteDistanceM(result.distanceM)
+        setRouteGeometry(result.geometry)
+        setRouteDurationS(result.durationS)
         setRouteHint('')
       } else {
         setRouteDistanceM(null)
+        setRouteGeometry(null)
+        setRouteDurationS(null)
         setRouteHint(result.error)
       }
     })
@@ -137,8 +148,11 @@ export default function QuickOrder({ profile, isAuthenticated, initialService = 
   const numericPrice = priceToNumber(price)
   const pickupInside = pickup ? isInsideServiceArea(pickup, SERVICE_AREA) : null
   const dropoffInside = dropoff ? isInsideServiceArea(dropoff, SERVICE_AREA) : null
-  const suggestedPrice = routeDistanceM != null ? suggestPriceFromRouteMeters(routeDistanceM) : null
   const straightMeters = pickup && dropoff ? haversineMeters(pickup, dropoff) : null
+  const estimatedMeters = straightMeters != null ? estimateRoadMeters(straightMeters) : null
+  const effectiveMeters = routeDistanceM ?? estimatedMeters
+  const priceIsEstimate = routeDistanceM == null
+  const suggestedPrice = effectiveMeters != null ? computeSuggestedPrice(effectiveMeters) : null
 
   function choosePlace(target: MapTarget, place: Place) {
     if (target === 'pickup') {
@@ -151,6 +165,27 @@ export default function QuickOrder({ profile, isAuthenticated, initialService = 
       setDropoffText(place.nameAr)
       setErrors(current => ({ ...current, dropoff: undefined, map: undefined }))
     }
+  }
+
+  function applyRecent(item: RecentOrder) {
+    setService(item.service)
+    setPickupText(item.pickupText)
+    setDropoffText(item.dropoffText)
+    setPickup(item.pickup)
+    setDropoff(item.dropoff)
+    setDetails(item.details)
+    setVehicle(item.vehicle)
+    setPrice('')
+    setErrors({})
+    setActiveTarget('dropoff')
+  }
+
+  function swapPlaces() {
+    setPickup(dropoff)
+    setDropoff(pickup)
+    setPickupText(dropoffText)
+    setDropoffText(pickupText)
+    setErrors(current => ({ ...current, pickup: undefined, dropoff: undefined, map: undefined }))
   }
 
   function handleMapPick(point: LatLng, target: MapTarget) {
@@ -294,6 +329,15 @@ export default function QuickOrder({ profile, isAuthenticated, initialService = 
         setErrors({ submit: result.error })
         return
       }
+      saveRecent({
+        service,
+        pickupText: draft.pickupText,
+        dropoffText: draft.dropoffText,
+        pickup,
+        dropoff,
+        details: details.trim(),
+        vehicle
+      })
       setSubmitted(true)
       if (result.kind === 'guest') {
         setGuestTicket({ code: result.orderCode, token: result.trackingToken })
@@ -338,6 +382,14 @@ export default function QuickOrder({ profile, isAuthenticated, initialService = 
           <button type="button" className="secondary-button" onClick={copyToken}>
             <Copy size={16} /> {copied ? 'تم النسخ' : 'نسخ رابط التتبع'}
           </button>
+          <a
+            className="secondary-button"
+            target="_blank"
+            rel="noopener noreferrer"
+            href={`https://wa.me/?text=${encodeURIComponent(`رمز طلبي في ERSEL: ${guestTicket.code}\nتتبّع الطلب: ${window.location.origin}${window.location.pathname}#track=${guestTicket.token}`)}`}
+          >
+            <Share2 size={16} /> مشاركة عبر واتساب
+          </a>
           <p className="ticket-warning">
             <ShieldCheck size={15} /> لا تشارك رمز التتبع علناً: من يملكه يستطيع رؤية حالة الطلب.
           </p>
@@ -366,6 +418,7 @@ export default function QuickOrder({ profile, isAuthenticated, initialService = 
           active={activeTarget}
           onPick={handleMapPick}
           onTileError={() => setMapFailed(true)}
+          route={routeGeometry}
           variant="full"
           sheetPadding
         />
@@ -444,6 +497,24 @@ export default function QuickOrder({ profile, isAuthenticated, initialService = 
 
         {sheetStep === 'route' && (
           <div className="sheet-body">
+            {recent.length > 0 && !pickup && !dropoff && (
+              <div className="recent-box">
+                <span className="recent-title"><History size={14} /> طلباتك السابقة</span>
+                <div className="recent-list">
+                  {recent.map(item => (
+                    <button
+                      key={`${item.service}|${item.pickupText}|${item.dropoffText}`}
+                      type="button"
+                      className="recent-chip"
+                      onClick={() => applyRecent(item)}
+                    >
+                      <b>{item.pickupText} ← {item.dropoffText}</b>
+                      <small>{serviceTitle(item.service)}</small>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <PlaceField
               compact
               field="pickup"
@@ -459,6 +530,11 @@ export default function QuickOrder({ profile, isAuthenticated, initialService = 
               onClearPoint={() => setPickup(null)}
               onActivateMap={() => setActiveTarget('pickup')}
             />
+            {(pickup || dropoff) && (
+              <button type="button" className="swap-btn" onClick={swapPlaces}>
+                <ArrowUpDown size={14} /> تبديل الانطلاق والوصول
+              </button>
+            )}
             <PlaceField
               compact
               field="dropoff"
@@ -477,13 +553,14 @@ export default function QuickOrder({ profile, isAuthenticated, initialService = 
             {errors.map && <p className="field-error">{errors.map}</p>}
             {pickup && !pickupInside && <p className="field-error">الانطلاق خارج نطاق السوقر (8 كم).</p>}
             {dropoff && !dropoffInside && <p className="field-error">الوصول خارج نطاق السوقر (8 كم).</p>}
-            {routeDistanceM != null && (
-              <p className="sheet-meta">مسافة المسار المتاحة: {formatDistance(routeDistanceM)}</p>
+            {pickup && dropoff && effectiveMeters != null && (
+              <div className="route-summary">
+                <span><RouteIcon size={14} /> {formatDistance(effectiveMeters)}{priceIsEstimate ? ' (تقديري)' : ''}</span>
+                {routeDurationS != null && <span><Clock3 size={14} /> نحو {formatDuration(routeDurationS)}</span>}
+                {suggestedPrice != null && <span>≈ {formatDzd(suggestedPrice)}</span>}
+              </div>
             )}
-            {!ROUTING_ENABLED && straightMeters != null && (
-              <p className="sheet-meta">خط مستقيم تقريبي: {formatDistance(straightMeters)} · مسار القيادة غير مفعّل.</p>
-            )}
-            {routeHint && <p className="sheet-meta">{routeHint}</p>}
+            {routeHint && priceIsEstimate && <p className="sheet-meta">{routeHint} نعرض تقديرًا من الخط المستقيم.</p>}
             <button type="button" className="primary-button full" disabled={!canContinueRoute} onClick={goDetails}>
               متابعة <ArrowLeft size={18} />
             </button>
@@ -579,7 +656,7 @@ export default function QuickOrder({ profile, isAuthenticated, initialService = 
               </div>
               {suggestedPrice != null && (
                 <button type="button" className="suggest-price" onClick={() => setPrice(String(suggestedPrice))}>
-                  اقتراح من المسافة المتاحة: {formatDzd(suggestedPrice)} — ليس تعريفة معتمدة
+                  اقتراح {priceIsEstimate ? 'تقريبي' : 'من مسار القيادة'}: {formatDzd(suggestedPrice)} — ليس تعريفة معتمدة
                 </button>
               )}
               {errors.price

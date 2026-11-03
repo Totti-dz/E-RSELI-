@@ -45,11 +45,11 @@ export const ACTIVE_TILE_PROVIDER: TileProvider =
   TILE_PROVIDERS[(import.meta.env.VITE_TILE_PROVIDER as string) || 'osm'] ?? TILE_PROVIDERS.osm
 
 /**
- * Driving-route lookup. Off by default so the UI never pretends a public
- * demo endpoint is a production routing service. Set VITE_ROUTING_ENABLED=1
- * to allow an explicit request; callers must still handle failure.
+ * Driving-route lookup (public OSRM demo, low traffic only). On by default;
+ * set VITE_ROUTING_ENABLED=0 to turn it off. Callers must still handle failure
+ * and fall back to a labelled estimate.
  */
-export const ROUTING_ENABLED = import.meta.env.VITE_ROUTING_ENABLED === '1'
+export const ROUTING_ENABLED = import.meta.env.VITE_ROUTING_ENABLED !== '0'
 
 export function haversineMeters(a: LatLng, b: LatLng): number {
   const R = 6371000

@@ -10,5 +10,11 @@ window.ERSEL_CONFIG = {
   supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxrcW1naWRteGdqcHBzc3p3bHZ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIxNzk1NDYsImV4cCI6MjEwNzc1NTU0Nn0.tm74fTPMs2a35A8LdZWt2GiVD9TtqeDc-tUGD2CWe2U",
   // نطاق البريد الوهمي المشتق من رقم الهاتف. لا تغيّره بعد وجود مستخدمين،
   // وإلا لن يتعرّف التطبيق على الحسابات القديمة.
-  emailDomain: "phone.ersel.app"
+  emailDomain: "phone.ersel.app",
+  // رابط تحميل APK المباشر. بعد أول بناء ناجح على GitHub يكون بهذا الشكل:
+  //   https://github.com/<USER>/<REPO>/releases/latest/download/ersel.apk
+  // اتركه فارغًا ليختفي زر التحميل لمستخدمي أندرويد (يبقى «تثبيت التطبيق» من المتصفح).
+  apkUrl: "",
+  // اختياري: owner/repo لتفعيل فحص التحديثات داخل التطبيق.
+  githubRepo: ""
 };

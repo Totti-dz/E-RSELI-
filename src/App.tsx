@@ -16,6 +16,9 @@ import NotificationBell from './components/NotificationBell'
 import CourierApply from './components/CourierApply'
 import AdminGate from './components/AdminGate'
 import AndroidInstall from './components/AndroidInstall'
+import IosInstall from './components/IosInstall'
+import OfflineBanner from './components/OfflineBanner'
+import { detectPlatform } from './lib/install'
 const QuickOrder = lazy(() => import('./components/QuickOrder'))
 const EmployeeDesk = lazy(() => import('./components/EmployeeDesk'))
 const AdminDesk = lazy(() => import('./components/AdminDesk'))
@@ -27,7 +30,7 @@ import { fetchCodeDesk, type CodeDeskPayload } from './lib/codeDesk'
 import type { ServiceId } from './lib/services'
 import { homePageForRole, isStaffRole, ROLE_LABELS, type AppPage } from './lib/roles'
 import { useOrderNotifications } from './hooks/useOrderNotifications'
-import { hasApkLink } from './lib/release'
+import { hasApkLink, APK_URL } from './lib/release'
 import { avatarInitials } from './lib/profile'
 
 const ONBOARDING_KEY = 'ersel_onboarding_done_v1'
@@ -63,13 +66,17 @@ export default function App() {
 
   const userId = session?.user?.id ?? null
   const role: AppRole | null = profile?.role ?? null
-  const isAndroidDevice = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)
+  const platform = detectPlatform()
+  const installed = platform.standalone || platform.native
   const [showApkSheet, setShowApkSheet] = useState(false)
+  const [showIosSheet, setShowIosSheet] = useState(false)
   const [unreadNotifications, setUnreadNotifications] = useState(0)
   const [focusOrderId, setFocusOrderId] = useState<string | null>(null)
   const [deskRefreshKey, setDeskRefreshKey] = useState(0)
   const openApkSheet = useCallback(() => setShowApkSheet(true), [])
   const closeApkSheet = useCallback(() => setShowApkSheet(false), [])
+  const openIosSheet = useCallback(() => setShowIosSheet(true), [])
+  const closeIosSheet = useCallback(() => setShowIosSheet(false), [])
   const clearFocus = useCallback(() => setFocusOrderId(null), [])
 
   /** Notification tap → open the order in the screen that owns it. */
@@ -116,22 +123,6 @@ export default function App() {
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const fromQuery = params.get('order')
-    if (fromQuery) openOrderFromNotification(fromQuery)
-  }, [openOrderFromNotification])
-
-  useEffect(() => {
-    function onMessage(event: MessageEvent) {
-      if (event.data?.type !== 'ersel:open-order') return
-      const orderId = String(event.data.orderId || '')
-      if (orderId) openOrderFromNotification(orderId)
-    }
-    navigator.serviceWorker?.addEventListener('message', onMessage)
-    return () => navigator.serviceWorker?.removeEventListener('message', onMessage)
-  }, [openOrderFromNotification])
 
   const nav: { id: AppPage; label: string; icon: typeof Truck }[] = role && isStaffRole(role)
     ? [
@@ -339,14 +330,24 @@ export default function App() {
       <nav className={isMenuOpen ? 'nav open' : 'nav'}>
         {nav.map(item => <button key={item.id} className={page===item.id?'nav-link active':'nav-link'} onClick={() => go(item.id)}><item.icon size={17}/>{item.label}</button>)}
       </nav>
-      {isAndroidDevice && (
-        <button
-          className="android-download"
-          type="button"
-          onClick={openApkSheet}
-          aria-label="تحميل تطبيق ERSEL للأندرويد"
-        >
-          <Download size={17} /><span>{hasApkLink ? 'تحميل APK' : 'تثبيت التطبيق'}</span>
+      {platform.android && !installed && hasApkLink && (
+        <a className="android-download" href={APK_URL} rel="noopener noreferrer" aria-label="تحميل تطبيق ERSEL للأندرويد">
+          <Download size={17} /><span>تحميل التطبيق</span>
+        </a>
+      )}
+      {platform.android && !installed && !hasApkLink && (
+        <button className="android-download" type="button" onClick={openApkSheet} aria-label="تثبيت تطبيق ERSEL">
+          <Download size={17} /><span>تثبيت التطبيق</span>
+        </button>
+      )}
+      {platform.android && installed && (
+        <button className="android-download" type="button" onClick={openApkSheet} aria-label="الإشعارات والتحديثات">
+          <Smartphone size={17} /><span>الإشعارات</span>
+        </button>
+      )}
+      {platform.ios && !installed && (
+        <button className="android-download" type="button" onClick={openIosSheet} aria-label="تثبيت ERSEL على الآيفون">
+          <Download size={17} /><span>تثبيت التطبيق</span>
         </button>
       )}
       {session ? (
@@ -409,16 +410,16 @@ export default function App() {
           </div>
         </section>
 
-        {isAndroidDevice && (
+        {platform.ios && !installed && (
           <section className="apk-promo">
             <span className="apk-promo-icon"><Smartphone size={26} /></span>
             <div>
-              <span className="eyebrow">تطبيق أندرويد</span>
+              <span className="eyebrow">للآيفون</span>
               <h2>ثبّت ERSEL على هاتفك</h2>
-              <p>نفس حسابك ونفس طلباتك، بأيقونة على الشاشة الرئيسية وإشعارات بصوت مخصّص عند كل تحديث.</p>
+              <p>من Safari: زر المشاركة ثم «إضافة إلى الشاشة الرئيسية». نفس حسابك ونفس طلباتك بأيقونة على الشاشة.</p>
             </div>
-            <button className="light-button" onClick={openApkSheet}>
-              <Download size={17} /> {hasApkLink ? 'تحميل APK' : 'كيف أثبّته؟'}
+            <button className="light-button" onClick={openIosSheet}>
+              <Download size={17} /> كيف أثبّته؟
             </button>
           </section>
         )}
@@ -439,7 +440,6 @@ export default function App() {
           viewerId={userId}
           focusOrderId={focusOrderId}
           onFocusHandled={clearFocus}
-          refreshKey={deskRefreshKey}
         />
       )}
 
@@ -500,6 +500,8 @@ export default function App() {
       />
     )}
     {showApkSheet && <AndroidInstall onClose={closeApkSheet} />}
+    {showIosSheet && <IosInstall onClose={closeIosSheet} />}
+    <OfflineBanner />
 
     {notice && <div className="toast" role="status"><span>{notice}</span><button onClick={()=>setNotice('')} aria-label="إغلاق"><X size={17}/></button></div>}
     <footer><div className="footer-brand"><span className="brand-mark"><img src="/brand/logo-mark.webp" alt="" /></span><b>ERSEL</b></div><span>كلش يجي لعندك</span><span>© {new Date().getFullYear()} ERSEL · ولاية تيارت — بلدية السوقر</span></footer>

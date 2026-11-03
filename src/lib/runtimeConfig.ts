@@ -5,10 +5,17 @@
  * rebuild) → build-time `VITE_*` variables. This removes the classic failure where a
  * build made without environment variables silently ships an app that cannot sign up.
  */
+declare const __FALLBACK_SUPABASE_URL__: string | undefined
+declare const __FALLBACK_SUPABASE_KEY__: string | undefined
+
 export type ErselRuntimeConfig = {
   supabaseUrl?: string
   supabaseAnonKey?: string
   emailDomain?: string
+  /** رابط تحميل APK المباشر (مثلاً من GitHub Releases). يُعدَّل من config.js بلا إعادة بناء. */
+  apkUrl?: string
+  /** owner/repo على GitHub، لفحص التحديثات إن لم يُحدَّد apkUrl. */
+  githubRepo?: string
 }
 
 declare global {
@@ -39,8 +46,8 @@ export function resolveConfig(): ResolvedConfig {
   const runtime = readRuntime()
   const rUrl = clean(runtime.supabaseUrl)
   const rKey = clean(runtime.supabaseAnonKey)
-  const bUrl = clean(import.meta.env.VITE_SUPABASE_URL)
-  const bKey = clean(import.meta.env.VITE_SUPABASE_ANON_KEY)
+  const bUrl = clean(import.meta.env.VITE_SUPABASE_URL) || clean(typeof __FALLBACK_SUPABASE_URL__ === 'string' ? __FALLBACK_SUPABASE_URL__ : '')
+  const bKey = clean(import.meta.env.VITE_SUPABASE_ANON_KEY) || clean(typeof __FALLBACK_SUPABASE_KEY__ === 'string' ? __FALLBACK_SUPABASE_KEY__ : '')
   const domain = clean(runtime.emailDomain) || 'phone.ersel.app'
 
   if (rUrl && rKey && !PLACEHOLDER.test(rUrl) && !PLACEHOLDER.test(rKey)) {
