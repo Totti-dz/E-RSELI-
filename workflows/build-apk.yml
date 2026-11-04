@@ -1,0 +1,191 @@
+# ============================================================
+# ERSEL — يبني APK عند كل push وينشره على رابط ثابت
+#
+# الرابط الثابت (لا يتغيّر أبدًا):
+#   https://github.com/<USER>/<REPO>/releases/latest/download/ersel.apk
+#
+# كيف يعمل:
+#   - كل push إلى أي فرع → بناء APK → إصدار جديد بوسم v<رقم التشغيل>.
+#   - يُعلَّم الإصدار الجديد «latest»، فيبقى الرابط أعلاه صالحًا مع احتفاظك
+#     بتاريخ كل النسخة السابقة في تبويب Releases.
+#   - رقم البناء يُطبع داخل التطبيق، فيستطيع المستخدم معرفة أن لديه نسخة قديمة
+#     من زر «تحقّق من التحديث» في لوحة التثبيت.
+#   - يمكن التشغيل يدويًا: Actions ← Build APK ← Run workflow.
+#
+# لا يحتاج Android Studio: مشروع android/ يُولَّد داخل التشغيل نفسه
+# عبر scripts/android-init.mjs (Capacitor + الأيقونة + الصوت).
+#
+# الإعداد: عدّل public/config.js (supabaseUrl و supabaseAnonKey) مرة واحدة.
+#   متغيرات VITE_SUPABASE_* في GitHub اختيارية (احتياط فقط) ولم تعد لازمة.
+# اختياري للتوقيع الرسمي (Secrets):
+#   ERSEL_KEYSTORE_BASE64, ERSEL_KEYSTORE_PASSWORD,
+#   ERSEL_KEY_ALIAS, ERSEL_KEY_PASSWORD
+# بدونها يُوقَّع الـ APK بمفتاح debug: يُثبَّت ويعمل، لكنه لا يصلح للتحديث
+# فوق نسخة موقّعة بمفتاح آخر.
+# ============================================================
+
+name: Build APK
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    name: APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: جلب المشروع
+        uses: actions/checkout@v4
+
+      - name: تجهيز Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: تثبيت الحزم
+        run: npm ci
+
+      - name: فحص سريع (أنواع + اختبارات + SQL)
+        run: |
+          npm run typecheck
+          npm test
+          npm run test:sql
+
+      - name: بناء الواجهة
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY || secrets.VITE_SUPABASE_ANON_KEY }}
+          # الزر داخل التطبيق يشير إلى هذا المستودع — لا حاجة لتعديل أي ملف.
+          VITE_GITHUB_REPO: ${{ github.repository }}
+          VITE_ANDROID_APK_URL: https://github.com/${{ github.repository }}/releases/latest/download/ersel.apk
+          # يُطبع داخل التطبيق ويُقارن بآخر إصدار ليعرف المستخدم أن هناك تحديثًا.
+          VITE_APP_BUILD: ${{ github.run_number }}
+          # يُفعَّل تسجيل FCM فقط إذا أضفتَ السر GOOGLE_SERVICES_JSON.
+          VITE_PUSH_ENABLED: ${{ secrets.GOOGLE_SERVICES_JSON != '' && 'true' || 'false' }}
+        run: npm run build
+
+      - name: التأكد من أن الإعداد مدمج (config.js)
+        run: |
+          set -euo pipefail
+          test -f dist/config.js || { echo "::error::dist/config.js مفقود (public/config.js)"; exit 1; }
+          grep -q 'supabase\.co' dist/config.js || { echo "::error::supabaseUrl غير مضبوط في public/config.js"; exit 1; }
+          if grep -qE 'YOUR_|xxxx' dist/config.js; then echo "::error::config.js ما زال يحتوي قيمًا تجريبية"; exit 1; fi
+          test -f dist/check.html || { echo "::error::dist/check.html مفقود"; exit 1; }
+
+      - name: تجهيز نسخة الاستضافة (htdocs)
+        run: |
+          set -euo pipefail
+          # محتوى dist يوضع في جذر الحزمة: index.html أوّلًا، لا مجلد dist.
+          ( cd dist && zip -r -q ../ersel-htdocs.zip . )
+          unzip -l ersel-htdocs.zip | head -20
+          test "$(unzip -Z1 ersel-htdocs.zip | grep -c '^index.html$')" -eq 1 || {
+            echo "::error::index.html ليس في جذر الحزمة"; exit 1; }
+          test "$(unzip -Z1 ersel-htdocs.zip | grep -c '^\.htaccess$')" -eq 1 || {
+            echo "::error::.htaccess مفقود من الحزمة"; exit 1; }
+
+      - name: توليد مشروع أندرويد + الأيقونة + الصوت
+        run: node scripts/android-init.mjs
+
+      - name: إضافة google-services.json (إشعارات FCM، اختياري)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+            grep -q '"package_name": *"app.ersel.dz"' android/app/google-services.json || { echo "::error::package_name في google-services.json يجب أن يكون app.ersel.dz"; exit 1; }
+            echo "FCM مفعّل"
+          else
+            echo "::warning::لا يوجد GOOGLE_SERVICES_JSON — الإشعارات الخلفية معطّلة."
+          fi
+
+      - name: تجهيز Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: تجهيز Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: التوقيع (اختياري)
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ERSEL_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ERSEL_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ERSEL_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ERSEL_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > android/app/ersel-release.keystore
+            {
+              echo "storeFile=ersel-release.keystore"
+              echo "storePassword=$KEYSTORE_PASSWORD"
+              echo "keyAlias=$KEY_ALIAS"
+              echo "keyPassword=$KEY_PASSWORD"
+            } > android/keystore.properties
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::لا يوجد keystore — سيُوقّع الـ APK بمفتاح debug."
+          fi
+
+      - name: بناء APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon -PerselVersionCode=${{ github.run_number }}
+
+      - name: جمع الملف
+        id: apk
+        run: |
+          set -euo pipefail
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          test -f "$APK" || { echo "::error::لم يُنتج gradle ملف APK"; find android/app/build/outputs -name '*.apk'; exit 1; }
+          cp "$APK" ersel.apk
+          ls -lh ersel.apk
+          echo "sha256=$(sha256sum ersel.apk | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: رفع الملف كـ Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ersel-apk-${{ github.run_number }}
+          path: |
+            ersel.apk
+            ersel-htdocs.zip
+          retention-days: 30
+          if-no-files-found: error
+
+      # إصدار لكل بناء بوسم v<رقم التشغيل>، ويُعلَّم «latest» فيبقى الرابط الثابت
+      # releases/latest/download/ersel.apk صالحًا، مع احتفاظك بتاريخ كل النسخ.
+      - name: نشر الإصدار
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ersel.apk
+            ersel-htdocs.zip
+          tag_name: v${{ github.run_number }}
+          name: ERSEL v${{ github.run_number }}
+          make_latest: true
+          prerelease: false
+          body: |
+            ## تطبيق ERSEL للأندرويد — بناء ${{ github.run_number }}
+
+            - **تحميل التطبيق:** `ersel.apk` (أندرويد 7.0 وأحدث)
+            - **نسخة الاستضافة:** `ersel-htdocs.zip` — فكّ ضغطها داخل `htdocs` مباشرة (index.html في الجذر)
+            - **التوقيع:** ${{ steps.signing.outputs.signed == 'true' && 'مفتاح الإصدار الرسمي' || 'مفتاح debug — للتجربة فقط' }}
+            - **SHA-256:** `${{ steps.apk.outputs.sha256 }}`
+            - **الفرع:** `${{ github.ref_name }}` · **آخر تعديل:** ${{ github.event.head_commit.message || 'تشغيل يدوي' }}
+
+            التثبيت: نزّل الملف على الهاتف، افتحه، واسمح بالتثبيت من هذا المصدر مرة واحدة.
+            الإشعارات تعمل بصوت مخصّص بعد السماح بها من داخل التطبيق.
